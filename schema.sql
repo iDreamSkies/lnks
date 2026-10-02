@@ -54,3 +54,17 @@ CREATE TABLE IF NOT EXISTS utm_templates (
     campaign   TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Tags: case-insensitive names, many-to-many with links
+CREATE TABLE IF NOT EXISTS tags (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE
+);
+
+CREATE TABLE IF NOT EXISTS link_tags (
+    link_id INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE,
+    tag_id  INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (link_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_link_tags_tag ON link_tags(tag_id);
