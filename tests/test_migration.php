@@ -27,6 +27,7 @@ test('migration: upgrades a database from the main branch', function () {
     eq(null, $l['expires_at'], 'new column expires_at starts empty');
     eq(null, $l['max_clicks'], 'new column max_clicks starts empty');
     eq(null, $l['password_hash'], 'new column password_hash starts empty');
+    eq(0, (int)$pdo->query('SELECT COUNT(*) FROM utm_templates')->fetchColumn(), 'utm_templates table created');
     $pdo = null;
     @unlink($file);
 });

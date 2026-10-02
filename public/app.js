@@ -162,6 +162,19 @@
         }
     });
 
+    // UTM template picker fills the tag inputs of its form (the server also applies the template without JS)
+    document.addEventListener('change', function (ev) {
+        var sel = ev.target.closest('select[data-utm-select]');
+        if (!sel) return;
+        var opt = sel.options[sel.selectedIndex];
+        var data = {};
+        try { data = JSON.parse(opt.getAttribute('data-utm') || '{}'); } catch (e) { data = {}; }
+        ['source', 'medium', 'campaign'].forEach(function (f) {
+            var input = sel.form.querySelector('[name="utm_' + f + '"]');
+            if (input) input.value = data[f] || '';
+        });
+    });
+
     // Select the freshly created short URL right away
     var result = document.querySelector('.result input[data-select]');
     if (result) result.select();

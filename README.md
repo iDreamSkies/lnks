@@ -65,6 +65,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
 - **Password-protected links**: visitors enter a password before the redirect; the destination is never shown before that, and guessing is throttled per link and IP
+- **UTM tags and templates**: add `utm_source` / `utm_medium` / `utm_campaign` when creating a link, or pick a saved template (Admin → UTM templates); other query parameters and the `#fragment` are kept as they are
 - **CSV import & export** with preview, duplicate detection and an error report; **YOURLS exports import as is** (keywords keep working)
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
 
@@ -211,6 +212,14 @@ curl -X POST https://lnks.example.com/api.php \
   -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/very/long/url", "title": "Docs", "expires_at": "2026-12-31 23:59", "max_clicks": 100}'
 
+# Create with UTM tags: explicit tags and/or a saved template (by name or id); explicit tags win
+curl -X POST https://lnks.example.com/api.php \
+  -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/sale", "utm_template": "Newsletter", "utm": {"campaign": "black-friday"}}'
+
+# Saved UTM templates
+curl "https://lnks.example.com/api.php?utm_templates=1" -H "Authorization: Bearer YOUR_API_TOKEN"
+
 # List (q, state=active|expired|disabled, limit 1-100, offset)
 curl "https://lnks.example.com/api.php?q=docs&state=active&limit=20" -H "Authorization: Bearer YOUR_API_TOKEN"
 
@@ -305,7 +314,7 @@ lnks is the intentionally minimal open-source core. A full-featured edition exis
 
 - Custom slugs and link editing
 - Multi-domain support
-- UTM builder and per-click analytics (geo, device, browser, unique visitors)
+- Per-click analytics (geo, device, browser, unique visitors)
 - A/B split testing
 - Telegram bot integration
 - Multi-user access with roles

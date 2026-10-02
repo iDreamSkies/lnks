@@ -8,10 +8,12 @@
  *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks", "password" } → 200
  *                                            (null or "" removes the expiry / click limit / password)
  *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
+ *   GET    /api.php?utm_templates=1 saved UTM templates                                             → 200
  *   GET    /api.php?export=csv      all links as CSV (same file as the admin export)                → 200
  *   POST   /api.php?import=csv      import CSV (raw text/csv body or multipart field "file");
  *                                   add &dry_run=1 to only validate                                 → 200
  *
+ * utm: { "source", "medium", "campaign" } and/or "utm_template": id or name — tags are added to the URL
  * expires_at: UTC "YYYY-MM-DD HH:MM[:SS]", ISO 8601 with offset, or "YYYY-MM-DD" (= end of that day)
  *
  * Header: Authorization: Bearer <api_token>
@@ -105,10 +107,20 @@ if ($method === 'POST' && ($_GET['import'] ?? '') === 'csv') {
         + ['errors' => array_map(fn($e) => ['line' => $e['line'], 'error' => $e['error']], $parsed['errors'])]);
 }
 
+if ($method === 'GET' && !empty($_GET['utm_templates'])) {
+    respondJson(['ok' => true, 'items' => array_map(fn($t) => [
+        'id' => (int)$t['id'], 'name' => $t['name'],
+        'source' => $t['source'], 'medium' => $t['medium'], 'campaign' => $t['campaign'],
+    ], utmTemplates($pdo))]);
+}
+
 switch ($method) {
     case 'POST':
         $d = requestData();
+        [$utm, $err] = resolveUtm($pdo, $d['utm_template'] ?? null, is_array($d['utm'] ?? null) ? $d['utm'] : []);
+        if ($err) respondJson(['ok' => false, 'error' => $err], 422);
         $r = createLink($pdo, (string)($d['url'] ?? ''), clientIp(), [
+            'utm'        => $utm,
             'title'      => isset($d['title']) ? (string)$d['title'] : null,
             'expires_at' => $d['expires_at'] ?? null,
             'max_clicks' => $d['max_clicks'] ?? null,

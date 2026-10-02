@@ -6,7 +6,7 @@
 
 require_once __DIR__ . '/layout.php';
 
-const LNKS_SCHEMA_VERSION = 4;
+const LNKS_SCHEMA_VERSION = 5;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -306,15 +306,107 @@ function stateSql(string $state): string {
     return '1';
 }
 
+/* ── UTM tags ────────────────────────────────────────────────────── */
+
+const UTM_FIELDS = ['source', 'medium', 'campaign'];
+
+/** Normalise UTM input (keys source/medium/campaign or utm_*). Returns [array utm_* => value, error|null]. */
+function parseUtm($in): array {
+    $out = [];
+    if (!is_array($in)) return [[], null];
+    foreach (UTM_FIELDS as $f) {
+        $v = $in[$f] ?? $in['utm_' . $f] ?? '';
+        if (!is_scalar($v)) return [[], t('utm.err_value')];
+        $v = trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', (string)$v));
+        if (strlen($v) > 100) return [[], t('utm.err_value')];
+        if ($v !== '') $out['utm_' . $f] = $v;
+    }
+    return [$out, null];
+}
+
+/**
+ * Add UTM tags to a URL. The query string is edited as text, so other parameters keep their exact
+ * spelling (parse_str would mangle keys like "a.b" or "x[]"); existing tags with the same name are
+ * replaced and the #fragment stays at the end.
+ */
+function applyUtm(string $url, array $utm): string {
+    if (!$utm) return $url;
+    $frag = '';
+    if (($p = strpos($url, '#')) !== false) {
+        $frag = substr($url, $p);
+        $url  = substr($url, 0, $p);
+    }
+    [$base, $query] = array_pad(explode('?', $url, 2), 2, '');
+    $pairs = [];
+    foreach ($query === '' ? [] : explode('&', $query) as $pair) {
+        if ($pair === '' || isset($utm[urldecode(explode('=', $pair, 2)[0])])) continue;
+        $pairs[] = $pair;
+    }
+    foreach ($utm as $k => $v) $pairs[] = $k . '=' . rawurlencode($v);
+    return $base . '?' . implode('&', $pairs) . $frag;
+}
+
+/** @return array<int,array> all UTM templates, by name */
+function utmTemplates(PDO $pdo): array {
+    return $pdo->query('SELECT * FROM utm_templates ORDER BY name COLLATE NOCASE')->fetchAll();
+}
+
+/** Find a template by id or name. */
+function findUtmTemplate(PDO $pdo, $ref): ?array {
+    if ($ref === null || $ref === '') return null;
+    return is_int($ref) || preg_match('~^\d+$~', (string)$ref)
+        ? row($pdo, 'SELECT * FROM utm_templates WHERE id = :i', [':i' => (int)$ref])
+        : row($pdo, 'SELECT * FROM utm_templates WHERE name = :n', [':n' => (string)$ref]);
+}
+
+function saveUtmTemplate(PDO $pdo, string $name, array $fields): array {
+    $name = trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', $name));
+    if ($name === '' || strlen($name) > 60) return ['ok' => false, 'error' => t('utm.err_name')];
+    [$utm, $err] = parseUtm($fields);
+    if ($err) return ['ok' => false, 'error' => $err];
+    if (!$utm) return ['ok' => false, 'error' => t('utm.err_empty')];
+    try {
+        $pdo->prepare('INSERT INTO utm_templates (name, source, medium, campaign, created_at) VALUES (:n, :s, :m, :c, :t)')
+            ->execute([':n' => $name, ':s' => $utm['utm_source'] ?? null, ':m' => $utm['utm_medium'] ?? null,
+                       ':c' => $utm['utm_campaign'] ?? null, ':t' => now()]);
+    } catch (PDOException $ex) {
+        if ($ex->getCode() === '23000') return ['ok' => false, 'error' => t('utm.err_dup')];
+        throw $ex;
+    }
+    return ['ok' => true, 'id' => (int)$pdo->lastInsertId()];
+}
+
+/** UTM tags for a new link: template values first, explicit fields override. Returns [utm, error|null]. */
+function resolveUtm(PDO $pdo, $templateRef, $fields): array {
+    $base = [];
+    if ($templateRef !== null && $templateRef !== '') {
+        $tpl = findUtmTemplate($pdo, $templateRef);
+        if (!$tpl) return [[], t('utm.err_unknown')];
+        [$base] = parseUtm($tpl);
+    }
+    [$own, $err] = parseUtm($fields);
+    if ($err) return [[], $err];
+    $merged = [];   // always source → medium → campaign, whichever side a tag came from
+    foreach (UTM_FIELDS as $f) {
+        $v = $own['utm_' . $f] ?? $base['utm_' . $f] ?? null;
+        if ($v !== null) $merged['utm_' . $f] = $v;
+    }
+    return [$merged, null];
+}
+
 /* ── Create / update link ─────────────────────────────────────────── */
 
 /**
- * @param array $opt title?, expires_at?, max_clicks?, password?
+ * @param array $opt title?, expires_at?, max_clicks?, password?, utm? (array utm_* => value, see resolveUtm)
  */
 function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []): array {
     $url = trim($url);
     if (!isValidUrl($url)) {
         return ['ok' => false, 'error' => t('err.invalid_url')];
+    }
+    if (!empty($opt['utm'])) {
+        $url = applyUtm($url, $opt['utm']);
+        if (!isValidUrl($url)) return ['ok' => false, 'error' => t('err.invalid_url')];
     }
     if (strlen($url) > 2048) {
         return ['ok' => false, 'error' => t('err.too_long')];

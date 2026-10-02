@@ -152,7 +152,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             flash('ok', t('flash.deleted'));
             break;
         case 'create':
+            [$utm, $err] = resolveUtm($pdo, (string)($_POST['utm_template'] ?? ''), $_POST);
+            if ($err) {
+                flash('error', $err);
+                break;
+            }
             $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, [
+                'utm'        => $utm,
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
                 'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
@@ -171,6 +177,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             elseif ((string)($_POST['password'] ?? '') !== '') $fields['password'] = (string)$_POST['password'];
             $r = updateLink($pdo, $id, $fields);
             $r['ok'] ? flash('ok', t('flash.saved')) : flash('error', $r['error']);
+            break;
+        case 'utm_add':
+            $r = saveUtmTemplate($pdo, (string)($_POST['name'] ?? ''), $_POST);
+            $r['ok'] ? flash('ok', t('utm.saved')) : flash('error', $r['error']);
+            break;
+        case 'utm_delete':
+            $pdo->prepare('DELETE FROM utm_templates WHERE id = :i')->execute([':i' => $id]);
+            flash('ok', t('utm.deleted'));
             break;
         case 'import_run':
             $importId = (string)($_POST['import_id'] ?? '');
@@ -195,6 +209,73 @@ $flashHtml = $flash
     ? '<p class="alert ' . ($flash['type'] === 'ok' ? 'ok' : 'error') . '" role="status">' . e($flash['msg']) . '</p>'
     : '';
 $opts = ['nav' => 'admin', 'csrf' => csrfToken(), 'scripts' => [QR_SCRIPT]];
+
+/** UTM inputs (+ template picker) shared by the create form. */
+function utmFields(array $templates): string {
+    $opts = '<option value="">' . te('utm.none') . '</option>';
+    foreach ($templates as $tpl) {
+        $data = json_encode(['source' => (string)$tpl['source'], 'medium' => (string)$tpl['medium'], 'campaign' => (string)$tpl['campaign']], JSON_UNESCAPED_UNICODE);
+        $opts .= '<option value="' . (int)$tpl['id'] . '" data-utm="' . e($data) . '">' . e($tpl['name']) . '</option>';
+    }
+    return '<fieldset class="utm">
+            <legend>' . te('utm.h') . '</legend>
+            <div class="settings">
+                ' . ($templates ? '<label>' . te('utm.template') . '<select name="utm_template" data-utm-select>' . $opts . '</select></label>' : '') . '
+                ' . utmInputs() . '
+            </div>
+        </fieldset>';
+}
+
+function utmInputs(array $values = []): string {
+    $lists = ['source' => ['google', 'yandex', 'telegram', 'vk', 'facebook', 'instagram', 'youtube', 'newsletter'],
+              'medium' => ['cpc', 'social', 'email', 'referral', 'banner', 'qr', 'messenger']];
+    $out = '';
+    foreach (UTM_FIELDS as $f) {
+        $list = isset($lists[$f]) ? ' list="utm-' . $f . '-list"' : '';
+        $out .= '<label>' . te('utm.' . $f) . '<input type="text" name="utm_' . $f . '" maxlength="100" value="' . e((string)($values[$f] ?? '')) . '"' . $list . ' autocomplete="off"></label>';
+    }
+    foreach ($lists as $f => $items) {
+        $out .= '<datalist id="utm-' . $f . '-list">' . implode('', array_map(fn($v) => '<option value="' . e($v) . '">', $items)) . '</datalist>';
+    }
+    return $out;
+}
+
+/* ── UTM templates page ───────────────────────────────────────────── */
+if (($_GET['view'] ?? '') === 'utm') {
+    $rowsHtml = '';
+    foreach (utmTemplates($pdo) as $tpl) {
+        $rowsHtml .= '<tr><td><strong>' . e($tpl['name']) . '</strong></td>'
+            . '<td class="code">' . e((string)$tpl['source']) . '</td><td class="code">' . e((string)$tpl['medium']) . '</td><td class="code">' . e((string)$tpl['campaign']) . '</td>'
+            . '<td class="actions"><form method="post" class="icon-bar">' . csrfField()
+            . '<input type="hidden" name="id" value="' . (int)$tpl['id'] . '"><input type="hidden" name="back" value="?view=utm">'
+            . '<button name="action" value="utm_delete" class="ibtn danger" data-confirm="' . te('utm.confirm_delete') . '" title="' . te('btn.delete') . '" aria-label="' . te('btn.delete') . '">' . icon('trash') . '</button>'
+            . '</form></td></tr>';
+    }
+    if ($rowsHtml === '') $rowsHtml = '<tr><td colspan="5" class="muted center empty">' . te('utm.empty') . '</td></tr>';
+
+    renderLayout(t('utm.page_title'), '
+        <div class="topbar"><h1>' . te('utm.page_title') . '</h1></div>
+        ' . $flashHtml . '
+        <p class="muted">' . te('utm.page_text') . '</p>
+        <form method="post" class="card create">
+            ' . csrfField() . '
+            <input type="hidden" name="action" value="utm_add">
+            <input type="hidden" name="back" value="?view=utm">
+            <div class="settings">
+                <label>' . te('utm.name') . '<input type="text" name="name" maxlength="60" required></label>
+                ' . utmInputs() . '
+                <button type="submit" class="btn">' . te('utm.add') . '</button>
+            </div>
+        </form>
+        <div class="table-wrap">
+        <table class="plain-table">
+            <thead><tr><th>' . te('utm.name') . '</th><th>utm_source</th><th>utm_medium</th><th>utm_campaign</th><th></th></tr></thead>
+            <tbody>' . $rowsHtml . '</tbody>
+        </table>
+        </div>
+    ', $opts);
+    exit;
+}
 
 /* ── Import / export page ─────────────────────────────────────────── */
 if (($_GET['view'] ?? '') === 'io' || $preview !== null) {
@@ -479,6 +560,7 @@ renderLayout(t('list.title'), '
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" placeholder="' . te('form.max_clicks_ph') . '"></label>
                 <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . te('form.password_ph') . '"></label>
             </div>
+            ' . utmFields(utmTemplates($pdo)) . '
         </details>
     </form>
 

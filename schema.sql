@@ -39,3 +39,13 @@ CREATE TABLE IF NOT EXISTS unlock_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_unlock_link_ip_ts ON unlock_attempts(link_id, ip, ts);
+
+-- Saved sets of UTM tags applied when creating links
+CREATE TABLE IF NOT EXISTS utm_templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    source     TEXT,
+    medium     TEXT,
+    campaign   TEXT,
+    created_at TEXT NOT NULL
+);
