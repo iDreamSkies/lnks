@@ -126,13 +126,22 @@
     document.addEventListener('click', function (ev) {
         var btn = ev.target.closest('[data-copy]');
         if (btn) {
-            var label = btn.textContent;
+            // Icon buttons keep their icon: feedback goes to colour + tooltip instead of the text
+            var iconOnly = btn.classList.contains('ibtn');
+            var label = iconOnly ? btn.getAttribute('title') : btn.textContent;
+            var show = function (text, cls) {
+                if (iconOnly) { btn.setAttribute('title', text); btn.classList.add(cls); }
+                else btn.textContent = text;
+            };
             copyText(btn.getAttribute('data-copy')).then(function () {
-                btn.textContent = msg.copied || 'Copied!';
+                show(msg.copied || 'Copied!', 'ok');
             }, function () {
-                btn.textContent = msg.copyfail || 'Press Ctrl+C';
+                show(msg.copyfail || 'Press Ctrl+C', 'fail');
             }).then(function () {
-                setTimeout(function () { btn.textContent = label; }, 1500);
+                setTimeout(function () {
+                    if (iconOnly) { btn.setAttribute('title', label); btn.classList.remove('ok', 'fail'); }
+                    else btn.textContent = label;
+                }, 1500);
             });
             return;
         }

@@ -16,6 +16,25 @@ test('http: homepage renders with security headers', function () {
     eq('DENY', $r->header('X-Frame-Options'));
 });
 
+test('http: homepage speaks to visitors — no API link, how-it-works steps, admin login in the footer', function () {
+    $r = (new Client())->get('/?lang=en');
+    notContains('#api', $r->body);
+    notContains('REST API', $r->body);
+    contains('How it works', $r->body);
+    contains('placeholder="Paste a long link here"', $r->body);
+    contains('<a href="/admin.php">Admin login</a>', $r->body);
+});
+
+test('http: admin rows use a single icon toolbar with accessible labels', function () {
+    api('POST', '/api.php', ['url' => 'https://example.com/icons', 'title' => 'Icon row']);
+    $page = (new Client())->login()->get('/admin.php?q=Icon+row');
+    contains('class="icon-bar"', $page->body);
+    foreach (['Statistics', 'Copy', 'QR code', 'Disable', 'Delete'] as $label) {
+        contains('aria-label="' . $label . '"', $page->body, $label);
+    }
+    contains('<svg viewBox="0 0 24 24"', $page->body);
+});
+
 test('http: public form creates a link (CSRF required)', function () {
     $c = new Client();
     $t = $c->get('/')->csrf();

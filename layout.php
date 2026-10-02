@@ -113,10 +113,7 @@ function renderLayout(string $title, string $body, array $o = []): void {
             . '<form method="post" action="/admin.php" class="inline">'
             . '<input type="hidden" name="csrf" value="' . e($o['csrf'] ?? '') . '">'
             . '<button type="submit" name="action" value="logout" class="link">' . te('nav.logout') . '</button></form>';
-    } elseif ($nav === 'public') {
-        $links = '<a href="https://github.com/iDreamSkies/lnks#api" target="_blank" rel="noopener">' . te('nav.api') . '</a>'
-            . '<a href="/admin.php">' . te('nav.admin') . '</a>';
-    }
+    }   // public pages: only the language switch — visitors don't need API or admin links up front
 
     $foot = '';
     foreach (supportLinks() as $l) {
@@ -132,7 +129,8 @@ function renderLayout(string $title, string $body, array $o = []): void {
         . '<footer class="site-footer"><div class="footer-inner">'
         . '<nav class="footer-links" aria-label="' . te('footer.support') . '">' . $foot . '</nav>'
         . '<p class="muted small">lnks v' . e(LNKS_VERSION) . ' · MIT · ' . te('footer.built_by') . ' '
-        . '<a href="https://dreamskies.dev" target="_blank" rel="noopener">DreamSkies</a></p>'
+        . '<a href="https://dreamskies.dev" target="_blank" rel="noopener">DreamSkies</a>'
+        . ($nav === 'public' ? ' · <a href="/admin.php">' . te('footer.admin') . '</a>' : '') . '</p>'
         . '</div></footer>'
         . $scripts
         . '<script src="/public/app.js?v=' . $v . '" defer></script>'
@@ -153,7 +151,24 @@ const QR_SCRIPT = '/public/vendor/qrcode.js';
 
 /** "QR" button; public/app.js opens a dialog with a preview and PNG/SVG downloads. */
 function qrButton(string $url, string $name, string $class = 'btn ghost sm'): string {
-    return '<button type="button" class="' . e($class) . '" data-qr="' . e($url) . '" data-qr-name="' . e($name) . '">' . te('qr.button') . '</button>';
+    $iconOnly = strpos($class, 'ibtn') !== false;
+    return '<button type="button" class="' . e($class) . '" data-qr="' . e($url) . '" data-qr-name="' . e($name) . '"'
+        . ($iconOnly ? ' title="' . te('qr.title') . '" aria-label="' . te('qr.title') . '">' . icon('qr') : '>' . te('qr.button'))
+        . '</button>';
+}
+
+/** Small inline line icons (24×24, stroke = currentColor). Presentation attributes only, so the CSP stays strict. */
+function icon(string $name): string {
+    $paths = [
+        'stats'  => '<path d="M6 20v-8M12 20V5M18 20v-5M3 20h18"/>',
+        'copy'   => '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/>',
+        'qr'     => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17 21h4v-4"/>',
+        'pause'  => '<path d="M9 5v14M15 5v14"/>',
+        'play'   => '<path d="M7 4.5v15l12-7.5z"/>',
+        'trash'  => '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    ];
+    return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        . ($paths[$name] ?? '') . '</svg>';
 }
 
 /** Inline SVG bar chart (no inline styles so the strict CSP stays intact). */

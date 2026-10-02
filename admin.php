@@ -392,25 +392,26 @@ foreach ($links as $l) {
     $active = (int)$l['status'] === 1;
     $state  = linkState($l);
     $rows .= '<tr' . ($state === 'active' ? '' : ' class="disabled"') . '>
-        <td data-label="' . te('th.link') . '">
+        <td data-label="' . te('th.link') . '" class="cell-link">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
             ' . stateBadge($state) . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
             ' . limitsLine($l) . '
         </td>
-        <td data-label="' . te('th.dest') . '" class="url"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
+        <td data-label="' . te('th.dest') . '" class="url cell-dest"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
             <div class="muted small ellipsis">' . e($l['url']) . '</div></td>
         <td data-label="' . te('th.clicks') . '" class="num"><span class="n">' . (int)$l['clicks_total'] . '</span>' . barsSvg($sparks[(int)$l['id']], 56, 20, 'spark', array_combine(array_keys($sparks[(int)$l['id']]), array_keys($sparks[(int)$l['id']]))) . '</td>
         <td data-label="' . te('th.last') . '" class="muted nowrap">' . e($l['last_click_at'] ?? '—') . '</td>
         <td data-label="' . te('th.created') . '" class="muted nowrap">' . e(substr($l['created_at'], 0, 10)) . '</td>
         <td class="actions">
-            <form method="post">' . csrfField() . '
+            <form method="post" class="icon-bar">' . csrfField() . '
                 <input type="hidden" name="id" value="' . (int)$l['id'] . '">
                 <input type="hidden" name="back" value="' . e($back) . '">
-                <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
-                ' . qrButton($short, $l['code']) . '
-                <button name="action" value="toggle" class="btn ghost sm">' . ($active ? te('btn.disable') : te('btn.enable')) . '</button>
-                <button name="action" value="delete" class="btn danger sm" data-confirm="' . te('confirm.delete') . '">' . te('btn.delete') . '</button>
+                <a class="ibtn" href="/admin.php?id=' . (int)$l['id'] . '" title="' . te('btn.stats') . '" aria-label="' . te('btn.stats') . '">' . icon('stats') . '</a>
+                <button type="button" class="ibtn" data-copy="' . e($short) . '" title="' . te('btn.copy') . '" aria-label="' . te('btn.copy') . '">' . icon('copy') . '</button>
+                ' . qrButton($short, $l['code'], 'ibtn') . '
+                <button name="action" value="toggle" class="ibtn" title="' . ($active ? te('btn.disable') : te('btn.enable')) . '" aria-label="' . ($active ? te('btn.disable') : te('btn.enable')) . '">' . icon($active ? 'pause' : 'play') . '</button>
+                <button name="action" value="delete" class="ibtn danger" data-confirm="' . te('confirm.delete') . '" title="' . te('btn.delete') . '" aria-label="' . te('btn.delete') . '">' . icon('trash') . '</button>
             </form>
         </td>
     </tr>';
