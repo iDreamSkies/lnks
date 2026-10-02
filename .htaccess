@@ -6,9 +6,9 @@ RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
 # Protect storage, VCS data and internal files
-RewriteRule ^(storage|lang|tests)/ - [F]
+RewriteRule ^(storage|lang|tests|scripts)/ - [F]
 RewriteRule ^\.git(/|$) - [F]
-RewriteRule ^(config\.php|config\.example\.php|schema\.sql|bootstrap\.php|layout\.php|i18n\.php|csv\.php|router\.php|README(\.ru)?\.md|LICENSE|\.gitignore)$ - [F]
+RewriteRule ^(config\.php|config\.example\.php|schema\.sql|bootstrap\.php|layout\.php|i18n\.php|csv\.php|ua\.php|geo\.php|router\.php|README(\.ru)?\.md|LICENSE|\.gitignore)$ - [F]
 
 # Route short codes to index.php
 RewriteCond %{REQUEST_FILENAME} !-f

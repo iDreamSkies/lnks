@@ -4,7 +4,8 @@
  *
  *   POST   /api.php                 create   { "url", "title"?, "expires_at"?, "max_clicks"?, "password"? } → 201
  *   GET    /api.php                 list     ?q=&state=active|expired|disabled&limit=20&offset=0   → 200
- *   GET    /api.php?code=aB3xYz     details  + clicks for the last 30 days                          → 200
+ *   GET    /api.php?code=aB3xYz     details + stats (?days=7|30|90: daily, hourly, browsers, os,
+ *                                   devices, countries, referrers, previous-period total)        → 200
  *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks", "password" } → 200
  *                                            (null or "" removes the expiry / click limit / password)
  *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
@@ -136,7 +137,10 @@ switch ($method) {
     case 'GET':
         if ($code !== '') {
             $l = findByCode($pdo, $code);
-            respondJson(['ok' => true, 'link' => linkOut($l) + ['daily_clicks' => dailyClicks($pdo, [(int)$l['id']], 30)]]);
+            $days = periodDays($_GET['days'] ?? null);
+            $stats = linkStats($pdo, (int)$l['id'], $days);
+            $stats['referrers'] = topReferrers($pdo, (int)$l['id'], 10, array_key_first($stats['daily']) . ' 00:00:00');
+            respondJson(['ok' => true, 'link' => linkOut($l) + ['daily_clicks' => dailyClicks($pdo, [(int)$l['id']], 30), 'stats' => $stats]]);
         }
         $q      = trim((string)($_GET['q'] ?? ''));
         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 20)));

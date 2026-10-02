@@ -5,8 +5,10 @@
  */
 
 require_once __DIR__ . '/layout.php';
+require_once __DIR__ . '/ua.php';
+require_once __DIR__ . '/geo.php';
 
-const LNKS_SCHEMA_VERSION = 6;
+const LNKS_SCHEMA_VERSION = 7;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -38,6 +40,7 @@ function cfg(): array {
         'api_token'    => '',
         'rate_limit'   => ['max' => 20, 'window_min' => 60],
         'domains'      => [],      // extra hosts that serve short links, e.g. ['go.example.com']
+        'geoip'        => false,   // country stats from storage/geoip-v4.bin (scripts/build-geoip.php)
         'code'         => ['alphabet' => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', 'length' => 6],
     ], require __DIR__ . '/config.php');
 }
@@ -108,6 +111,10 @@ function migrate(PDO $pdo): void {
         }
         if (!in_array('last_click_at', $cols, true)) {
             $pdo->exec('UPDATE links SET last_click_at = (SELECT MAX(ts) FROM clicks WHERE link_id = links.id)');
+        }
+        $clickCols = array_column($pdo->query('PRAGMA table_info(clicks)')->fetchAll(), 'name');
+        foreach (['browser', 'os', 'device', 'country'] as $col) {
+            if (!in_array($col, $clickCols, true)) $pdo->exec("ALTER TABLE clicks ADD COLUMN $col TEXT");
         }
         $pdo->exec('PRAGMA user_version=' . LNKS_SCHEMA_VERSION);
         $pdo->exec('COMMIT');
@@ -559,8 +566,10 @@ function recordClick(PDO $pdo, int $linkId): bool {
         $pdo->exec('ROLLBACK');
         return false;
     }
-    $pdo->prepare('INSERT INTO clicks (link_id, ts, referrer) VALUES (:l, :t, :r)')
-        ->execute([':l' => $linkId, ':t' => $ts, ':r' => $ref]);
+    $ua = parseUserAgent((string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $pdo->prepare('INSERT INTO clicks (link_id, ts, referrer, browser, os, device, country) VALUES (:l, :t, :r, :b, :o, :d, :c)')
+        ->execute([':l' => $linkId, ':t' => $ts, ':r' => $ref, ':b' => $ua['browser'], ':o' => $ua['os'],
+                   ':d' => $ua['device'], ':c' => geoEnabled() ? geoCountry(clientIp()) : null]);
     $pdo->exec('COMMIT');
     return true;
 }
@@ -591,10 +600,57 @@ function sparkData(PDO $pdo, array $linkIds): array {
     return $out;
 }
 
+/**
+ * Everything the link page and the API show for a period of $days days ending today (UTC):
+ * totals vs the previous period of the same length, daily and hourly series, breakdowns.
+ */
+function linkStats(PDO $pdo, int $linkId, int $days): array {
+    $from = gmdate('Y-m-d', time() - ($days - 1) * 86400) . ' 00:00:00';
+    $prev = gmdate('Y-m-d', time() - (2 * $days - 1) * 86400) . ' 00:00:00';
+    $p = [':l' => $linkId, ':f' => $from];
+    $count = fn(string $sql, array $params) => (int)scalar($pdo, $sql, $params);
+
+    $hourly = array_fill(0, 24, 0);
+    $st = $pdo->prepare("SELECT CAST(substr(ts, 12, 2) AS INTEGER) h, COUNT(*) c FROM clicks WHERE link_id = :l AND ts >= :f GROUP BY h");
+    $st->execute($p);
+    foreach ($st->fetchAll() as $r) $hourly[(int)$r['h']] = (int)$r['c'];
+
+    $breakdown = function (string $col) use ($pdo, $p): array {
+        $st = $pdo->prepare("SELECT COALESCE($col, '') k, COUNT(*) c FROM clicks WHERE link_id = :l AND ts >= :f GROUP BY k ORDER BY c DESC, k LIMIT 10");
+        $st->execute($p);
+        $out = [];
+        foreach ($st->fetchAll() as $r) $out[$r['k']] = (int)$r['c'];   // '' = unknown (clicks before stats existed)
+        return $out;
+    };
+
+    return [
+        'days'      => $days,
+        'clicks'    => $count('SELECT COUNT(*) FROM clicks WHERE link_id = :l AND ts >= :f', $p),
+        'previous'  => $count('SELECT COUNT(*) FROM clicks WHERE link_id = :l AND ts >= :p AND ts < :f', [':l' => $linkId, ':p' => $prev, ':f' => $from]),
+        'daily'     => dailyClicks($pdo, [$linkId], $days),
+        'hourly'    => $hourly,
+        'browsers'  => $breakdown('browser'),
+        'os'        => $breakdown('os'),
+        'devices'   => $breakdown('device'),
+        'countries' => $breakdown('country'),
+    ];
+}
+
+/** Stats period from a request parameter: 7, 30 or 90 days (default 30). */
+function periodDays($v): int {
+    $d = is_scalar($v) ? (int)$v : 0;
+    return in_array($d, [7, 30, 90], true) ? $d : 30;
+}
+
+/** Change vs the previous period in %, or null when there is nothing to compare with. */
+function percentChange(int $now, int $before): ?int {
+    return $before > 0 ? (int)round(($now - $before) / $before * 100) : null;
+}
+
 /** @return array<string,int> referrer host (or "Direct") => clicks, top $limit. */
-function topReferrers(PDO $pdo, int $linkId, int $limit = 10): array {
-    $st = $pdo->prepare('SELECT referrer, COUNT(*) c FROM clicks WHERE link_id = :i GROUP BY referrer');
-    $st->execute([':i' => $linkId]);
+function topReferrers(PDO $pdo, int $linkId, int $limit = 10, string $since = '0000-00-00'): array {
+    $st = $pdo->prepare('SELECT referrer, COUNT(*) c FROM clicks WHERE link_id = :i AND ts >= :s GROUP BY referrer');
+    $st->execute([':i' => $linkId, ':s' => $since]);
     $agg = [];
     foreach ($st->fetchAll() as $r) {
         $h = $r['referrer'] ? (hostOf($r['referrer']) ?: t('ref.other')) : t('ref.direct');

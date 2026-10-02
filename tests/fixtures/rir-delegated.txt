@@ -1,0 +1,9 @@
+2|ripencc|20261001|5|19830705|20261001|+0100
+ripencc|*|ipv4|*|3|summary
+ripencc|NL|ipv4|193.0.0.0|2048|19930901|allocated|abc
+ripencc|NL|ipv4|193.0.8.0|2048|19930901|assigned|abc
+ripencc|RU|ipv4|5.8.0.0|65536|20111111|allocated|def
+arin|US|ipv4|8.0.0.0|16777216|19921201|allocated|ghi
+arin|ZZ|ipv4|9.0.0.0|256|19921201|reserved|xyz
+apnic|JP|ipv6|2001:200::|35|19990813|allocated|jkl
+test|DE|ipv4|127.0.0.0|16777216|20000101|assigned|loopback-for-tests

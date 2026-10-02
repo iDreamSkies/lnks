@@ -95,7 +95,8 @@ final class Instance {
         fclose($sock);
         $this->base = 'http://127.0.0.1:' . $port;
 
-        $cmd = [PHP_BINARY, '-d', 'display_errors=stderr', '-S', '127.0.0.1:' . $port, '-t', $this->dir, $this->dir . '/router.php'];
+        // opcache off: tests rewrite config.php and must see the change on the very next request
+        $cmd = [PHP_BINARY, '-d', 'display_errors=stderr', '-d', 'opcache.enable=0', '-S', '127.0.0.1:' . $port, '-t', $this->dir, $this->dir . '/router.php'];
         $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
         // Several workers so tests can fire concurrent requests (ignored on Windows)
         $env = array_merge(getenv(), ['PHP_CLI_SERVER_WORKERS' => '4']);

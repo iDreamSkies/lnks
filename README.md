@@ -62,7 +62,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Dashboard: total links, total clicks, clicks today and over 7 days
 - Search by code, title or URL; filter by status (active / expired / disabled); sort by date, clicks or last click
 - Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
-- Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
+- Per-link 7-day sparkline and a statistics page: 7 / 30 / 90-day periods compared with the previous period, clicks per day and per hour, referrers, devices, browsers, operating systems and (optionally) countries
 - Enable / disable / delete, one-click copy, pagination
 - **Password-protected links**: visitors enter a password before the redirect; the destination is never shown before that, and guessing is throttled per link and IP
 - **Custom short names** (`/spring-sale`) and **several domains**: list extra hosts in `config.php` and bind a link to one of them, or leave it working on all
@@ -71,7 +71,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
 
 **Clicks**
-- Per-link counters with a click log (timestamp + referrer, no IPs, no cookies)
+- Per-link counters with a click log: timestamp, referrer, browser / OS / device family parsed on the server, optional country — **no IP addresses and no cookies are stored**
 - Bots, crawlers, link previews, `HEAD` requests and browser prefetches are **not** counted
 
 **Interface**
@@ -161,7 +161,8 @@ server {
     location /storage/ { deny all; }
     location /lang/    { deny all; }
     location /tests/   { deny all; }
-    location ~ ^/(config|bootstrap|layout|i18n|csv|router|schema|\.git) { deny all; }
+    location ~ ^/(config|bootstrap|layout|i18n|csv|ua|geo|router|schema|\.git) { deny all; }
+    location /scripts/ { deny all; }
 
     location / {
         try_files $uri /index.php$is_args$args;
@@ -199,6 +200,18 @@ lnks imports a CSV export of the YOURLS link table, and **your existing short li
 
 Notes: YOURLS stores `timestamp` in the server's time zone; lnks imports it as-is and treats it as UTC. A literal `NULL` (how phpMyAdmin writes empty values) is treated as empty. The per-click log (`yourls_log`) is not imported — only totals. Keywords with characters other than letters, digits, `-` and `_` are listed as errors in the preview.
 
+## Country statistics (optional)
+
+Countries are **off by default**: lnks never calls an external service and does not ship a third-party IP database. To turn them on, build a compact table once from the public registration statistics of the five Regional Internet Registries (AFRINIC, APNIC, ARIN, LACNIC, RIPE NCC):
+
+```bash
+php scripts/build-geoip.php          # downloads the five "delegated" files and writes storage/geoip-v4.bin
+```
+
+Then set `'geoip' => true` in `config.php`. No shell on your hosting? Run the script on your computer and upload `storage/geoip-v4.bin` over FTP; if the download is blocked, fetch the `delegated-*-extended-latest` files yourself and pass them as arguments. Re-run it every month or two.
+
+How it works and its limits: the table stores "range start → country" in 6 bytes per range and a lookup is a binary search in the file (no memory load). It tells which country an address block is **registered** to — accurate enough for country-level stats, not precise geolocation. Only IPv4 visitors are resolved; IPv6 and older clicks show as "Unknown". The IP itself is never stored.
+
 ## Language
 
 The interface is available in English and Russian. Visitors switch with the **EN | RU** toggle in the header; the choice is saved in a cookie. Without a choice, the browser language is used (falls back to English). To force a default for everyone, set `'lang' => 'en'` or `'ru'` in `config.php`.
@@ -233,8 +246,9 @@ curl "https://lnks.example.com/api.php?utm_templates=1" -H "Authorization: Beare
 # List (q, state=active|expired|disabled, limit 1-100, offset)
 curl "https://lnks.example.com/api.php?q=docs&state=active&limit=20" -H "Authorization: Bearer YOUR_API_TOKEN"
 
-# Details + clicks for the last 30 days
-curl "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN"
+# Details + statistics for 7, 30 (default) or 90 days: clicks vs the previous period,
+# daily, hourly (UTC), referrers, devices, browsers, os, countries
+curl "https://lnks.example.com/api.php?code=aB3xYz&days=7" -H "Authorization: Bearer YOUR_API_TOKEN"
 
 # Update any of: status (0/1), title, expires_at, max_clicks, password — null or "" removes a limit / the password
 curl -X PATCH "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN" \
@@ -278,6 +292,7 @@ Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status 
 | `api_token` | Bearer token for `/api.php`; empty = API disabled |
 | `public_form` | `true` — anyone can shorten from the homepage; `false` — admin/API only |
 | `domains` | Extra hosts that serve short links, e.g. `['go.example.com']` — point them at the same folder; links can be bound to one of them |
+| `geoip` | `true` to record the country of each click from `storage/geoip-v4.bin` (see *Country statistics*); default `false` |
 | `rate_limit` | `['max' => 20, 'window_min' => 60]` — public form limit per IP |
 | `trust_proxy` | `true` to read the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |
 | `code.length` | Short code length (default 6, clamped to 4–12) |
@@ -301,6 +316,8 @@ index.php      homepage + redirects        admin.php   admin panel
 api.php        REST API                    install.php web installer
 bootstrap.php  config, DB, helpers         layout.php  page layout, support links
 csv.php        CSV import / export
+ua.php, geo.php  User-Agent parsing, optional IPv4 → country lookup
+scripts/       build-geoip.php
 i18n.php       translations loader         lang/       en.php, ru.php
 schema.sql     database schema             public/     styles.css, app.js, vendor/qrcode.js
 tests/         automated checks (php tests/run.php)
@@ -324,7 +341,7 @@ Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. GitHub Actions runs the
 lnks is the intentionally minimal open-source core. A full-featured edition exists with:
 
 - Link editing (change the destination or short name)
-- Per-click analytics (geo, device, browser, unique visitors)
+- Unique visitors and city-level geography
 - A/B split testing
 - Telegram bot integration
 - Multi-user access with roles

@@ -72,6 +72,36 @@ function stateBadge(string $state, bool $showActive = false): string {
     return '<span class="badge ' . $map[$state][0] . '">' . te($map[$state][1]) . '</span>';
 }
 
+/** Name | share bar | count | % rows for a breakdown ('' key = unknown, e.g. clicks recorded before stats existed). */
+function breakdownTable(array $data, ?callable $label = null): string {
+    if (!$data) return '<p class="muted small">' . te('stats.no_clicks') . '</p>';
+    $total = max(1, array_sum($data));
+    $rows = '';
+    foreach ($data as $k => $c) {
+        $pct  = (int)round($c / $total * 100);
+        $name = $k === '' ? t('stats.unknown') : ($label ? $label((string)$k) : (string)$k);
+        $rows .= '<tr><td>' . e($name) . '</td><td class="share">' . shareBar($pct) . '</td>'
+            . '<td class="num">' . (int)$c . '</td><td class="num muted">' . $pct . '%</td></tr>';
+    }
+    return '<table class="plain-table breakdown"><tbody>' . $rows . '</tbody></table>';
+}
+
+function shareBar(int $pct): string {
+    return '<svg class="share-bar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">'
+        . '<rect class="bar zero" width="100" height="8" rx="2"/><rect class="bar" width="' . max(0, min(100, $pct)) . '" height="8" rx="2"/></svg>';
+}
+
+/** Flag emoji from an ISO country code (regional indicator symbols); '' for anything else. */
+function countryFlag(string $cc): string {
+    if (!preg_match('~^[A-Z]{2}$~', $cc)) return '';
+    $out = '';
+    foreach (str_split($cc) as $ch) {
+        $cp = 0x1F1E6 + ord($ch) - 65;
+        $out .= chr(0xF0) . chr(0x80 | ($cp >> 12 & 0x3F)) . chr(0x80 | ($cp >> 6 & 0x3F)) . chr(0x80 | ($cp & 0x3F));
+    }
+    return $out;
+}
+
 /** Lock badge for password-protected links. */
 function lockBadge(array $l): string {
     return empty($l['password_hash']) ? '' : '<span class="badge lock" title="' . te('status.protected') . '">' . icon('lock') . te('status.protected') . '</span>';
@@ -371,19 +401,31 @@ if (isset($_GET['id'])) {
         exit;
     }
 
-    $short  = shortUrl($l);
-    $daily  = dailyClicks($pdo, [(int)$l['id']], 30);
-    $labels = [];
-    foreach (array_keys($daily) as $d) $labels[$d] = $d;
-    $last30 = array_sum($daily);
-    $refs   = topReferrers($pdo, (int)$l['id']);
-    $refMax = max(1, ...array_values($refs ?: [0]));
+    $short = shortUrl($l);
+    $days  = periodDays($_GET['days'] ?? null);
+    $s     = linkStats($pdo, (int)$l['id'], $days);
+    $refs  = topReferrers($pdo, (int)$l['id'], 10, array_key_first($s['daily']) . ' 00:00:00');
+    $delta = percentChange($s['clicks'], $s['previous']);
+    $dayLabels  = array_combine(array_keys($s['daily']), array_keys($s['daily']));
+    $hourLabels = array_map(fn($h) => sprintf('%02d:00 UTC', $h), range(0, 23));
 
-    $refRows = '';
-    foreach ($refs as $host => $c) {
-        $refRows .= '<tr><td>' . e($host) . '</td><td class="num">' . $c . '</td></tr>';
+    $period = '<nav class="seg" aria-label="' . te('stats.period') . '">';
+    foreach ([7, 30, 90] as $d) {
+        $period .= $d === $days
+            ? '<span class="seg-cur" aria-current="true">' . te('stats.days', ['n' => $d]) . '</span>'
+            : '<a href="/admin.php?id=' . (int)$l['id'] . '&amp;days=' . $d . '">' . te('stats.days', ['n' => $d]) . '</a>';
     }
-    if ($refRows === '') $refRows = '<tr><td colspan="2" class="muted center">' . te('stats.no_clicks') . '</td></tr>';
+    $period .= '</nav>';
+
+    $deltaHtml = $delta === null
+        ? '<span class="muted small">' . te('stats.vs_none') . '</span>'
+        : '<span class="delta ' . ($delta > 0 ? 'up' : ($delta < 0 ? 'down' : '')) . '">'
+          . te('stats.vs', ['sign' => $delta > 0 ? '+' : '', 'n' => $delta, 'd' => $days]) . '</span>';
+
+    $devLabel = fn($k) => in_array($k, ['desktop', 'mobile', 'tablet'], true) ? t('dev.' . $k) : $k;
+    $countries = geoEnabled() || $s['countries'] !== [] && array_keys($s['countries']) !== ['']
+        ? breakdownTable($s['countries'], fn($k) => countryFlag($k) . ' ' . $k)
+        : '<p class="muted small">' . te('stats.geo_off') . '</p>';
 
     renderLayout(t('stats.title', ['code' => $l['code']]), '
         <p><a href="/admin.php">' . te('stats.back') . '</a></p>
@@ -400,21 +442,30 @@ if (isset($_GET['id'])) {
                 ' . stateBadge(linkState($l), true) . lockBadge($l) . '
             </div>
         </div>
+        <div class="topbar period-bar">' . $period . '</div>
         <div class="tiles">
             <div class="tile"><span class="tile-n">' . (int)$l['clicks_total'] . '</span><span class="muted">' . te('stats.total') . '</span></div>
-            <div class="tile"><span class="tile-n">' . $last30 . '</span><span class="muted">' . te('stats.last30') . '</span></div>
+            <div class="tile"><span class="tile-n">' . $s['clicks'] . '</span><span class="muted">' . te('stats.in_period', ['n' => $days]) . '</span>' . $deltaHtml . '</div>
             <div class="tile"><span class="tile-n small-n">' . e($l['last_click_at'] ?? '—') . '</span><span class="muted">' . te('stats.last_click') . '</span></div>
             <div class="tile"><span class="tile-n small-n">' . e($l['created_at']) . '</span><span class="muted">' . te('stats.created') . '</span></div>
         </div>
         <section class="card">
-            <h2>' . te('stats.chart') . '</h2>
-            ' . barsSvg($daily, 600, 120, 'chart', $labels) . '
-            <div class="chart-axis muted small"><span>' . e(array_key_first($daily)) . '</span><span>' . e(array_key_last($daily)) . '</span></div>
+            <h2>' . te('stats.chart_days') . '</h2>
+            ' . barsSvg($s['daily'], 600, 120, 'chart', $dayLabels) . '
+            <div class="chart-axis muted small"><span>' . e(array_key_first($s['daily'])) . '</span><span>' . e(array_key_last($s['daily'])) . '</span></div>
         </section>
         <section class="card">
-            <h2>' . te('stats.refs') . '</h2>
-            <table class="plain-table refs"><tbody>' . $refRows . '</tbody></table>
+            <h2>' . te('stats.hourly') . '</h2>
+            ' . barsSvg($s['hourly'], 600, 90, 'chart', $hourLabels) . '
+            <div class="chart-axis muted small"><span>00:00</span><span>12:00</span><span>23:00</span></div>
         </section>
+        <div class="breakdowns">
+            <section class="card"><h2>' . te('stats.refs') . '</h2>' . breakdownTable($refs) . '</section>
+            <section class="card"><h2>' . te('stats.devices') . '</h2>' . breakdownTable($s['devices'], $devLabel) . '</section>
+            <section class="card"><h2>' . te('stats.browsers') . '</h2>' . breakdownTable($s['browsers']) . '</section>
+            <section class="card"><h2>' . te('stats.os') . '</h2>' . breakdownTable($s['os']) . '</section>
+            <section class="card"><h2>' . te('stats.countries') . '</h2>' . $countries . '</section>
+        </div>
         <section class="card">
             <h2>' . te('stats.settings') . '</h2>
             <form method="post" class="settings">
