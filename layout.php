@@ -20,6 +20,8 @@ function supportLinks(): array {
         'website'  => ['label' => 'Website',         'url' => 'https://dreamskies.dev',                           'hint' => 'Custom development and hosting'],
         'issues'   => ['label' => 'Report an issue', 'url' => 'https://github.com/iDreamSkies/lnks/issues',      'hint' => 'Bugs and feature requests'],
         'github'   => ['label' => 'GitHub',          'url' => 'https://github.com/iDreamSkies/lnks',              'hint' => 'Source code and docs'],
+        'crypto'   => ['label' => 'Donate (crypto)', 'url' => 'https://pay.oxapay.com/14606636/',                  'hint' => 'Support the project with crypto'],
+        'yoomoney' => ['label' => 'Donate (RU, ЮMoney)', 'url' => 'https://yoomoney.ru/fundraise/1KGTK8NPPQN.260925', 'hint' => 'Поддержать проект (для пользователей из РФ)'],
         'full'     => ['label' => 'Full edition',    'url' => 'https://github.com/iDreamSkies/lnks#need-more',    'hint' => 'Analytics, custom slugs, teams'],
     ];
 }
