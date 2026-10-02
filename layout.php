@@ -4,7 +4,9 @@
  * Safe to include before config.php exists (used by the installer).
  */
 
-const LNKS_VERSION = '1.1.0';
+const LNKS_VERSION = '1.2.0';
+
+require_once __DIR__ . '/i18n.php';
 
 function e(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
@@ -15,15 +17,20 @@ function e(string $s): string {
  * footer of every page and in the admin "Help & support" card.
  */
 function supportLinks(): array {
-    return [
-        'telegram' => ['label' => 'Telegram',        'url' => 'https://t.me/dreamskies',                          'hint' => 'Questions and quick help'],
-        'website'  => ['label' => 'Website',         'url' => 'https://dreamskies.dev',                           'hint' => 'Custom development and hosting'],
-        'issues'   => ['label' => 'Report an issue', 'url' => 'https://github.com/iDreamSkies/lnks/issues',      'hint' => 'Bugs and feature requests'],
-        'github'   => ['label' => 'GitHub',          'url' => 'https://github.com/iDreamSkies/lnks',              'hint' => 'Source code and docs'],
-        'crypto'   => ['label' => 'Donate (crypto)', 'url' => 'https://pay.oxapay.com/14606636/',                  'hint' => 'Support the project with crypto'],
-        'yoomoney' => ['label' => 'Donate (RU, ЮMoney)', 'url' => 'https://yoomoney.ru/fundraise/1KGTK8NPPQN.260925', 'hint' => 'Поддержать проект (для пользователей из РФ)'],
-        'full'     => ['label' => 'Full edition',    'url' => 'https://github.com/iDreamSkies/lnks#need-more',    'hint' => 'Analytics, custom slugs, teams'],
+    $urls = [
+        'telegram' => 'https://t.me/dreamskies',
+        'website'  => 'https://dreamskies.dev',
+        'issues'   => 'https://github.com/iDreamSkies/lnks/issues',
+        'github'   => 'https://github.com/iDreamSkies/lnks',
+        'crypto'   => 'https://pay.oxapay.com/14606636/',
+        'yoomoney' => 'https://yoomoney.ru/fundraise/1KGTK8NPPQN.260925',
+        'full'     => 'https://github.com/iDreamSkies/lnks#need-more',
     ];
+    $out = [];
+    foreach ($urls as $k => $url) {
+        $out[$k] = ['label' => t('support.' . $k), 'url' => $url, 'hint' => t('support.' . $k . '.hint')];
+    }
+    return $out;
 }
 
 function supportCard(): string {
@@ -32,7 +39,19 @@ function supportCard(): string {
         $items .= '<li><a href="' . e($l['url']) . '" target="_blank" rel="noopener">' . e($l['label']) . '</a>'
             . '<span class="muted"> — ' . e($l['hint']) . '</span></li>';
     }
-    return '<section class="card support"><h2>Help &amp; support</h2><ul class="plain">' . $items . '</ul></section>';
+    return '<section class="card support"><h2>' . te('support.title') . '</h2><ul class="plain">' . $items . '</ul></section>';
+}
+
+/** EN | RU switcher */
+function langSwitcher(): string {
+    $cur = currentLang();
+    $out = '<span class="lang" role="group" aria-label="' . te('lang.label') . '">';
+    foreach (LNKS_LANGS as $code => $label) {
+        $out .= $code === $cur
+            ? '<span class="lang-cur" aria-current="true">' . e($label) . '</span>'
+            : '<a href="' . e(langUrl($code)) . '" hreflang="' . $code . '" rel="nofollow">' . e($label) . '</a>';
+    }
+    return $out . '</span>';
 }
 
 function sendSecurityHeaders(): void {
@@ -52,7 +71,7 @@ function renderLayout(string $title, string $body, array $o = []): void {
 
     $app   = $o['app'] ?? (function_exists('cfg') ? cfg()['app_name'] : 'lnks');
     $nav   = $o['nav'] ?? 'public';
-    $desc  = $o['description'] ?? 'Minimal self-hosted URL shortener. No accounts, no tracking.';
+    $desc  = $o['description'] ?? t('meta.default_desc');
     $v     = rawurlencode(LNKS_VERSION);
     $icon  = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8ff00'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%230e0f10'/%3E%3C/svg%3E";
     $fullTitle = e($title) . ' — ' . e($app);
@@ -76,14 +95,14 @@ function renderLayout(string $title, string $body, array $o = []): void {
 
     $links = '';
     if ($nav === 'admin') {
-        $links = '<a href="/admin.php">Links</a>'
-            . '<a href="/" >Public page</a>'
+        $links = '<a href="/admin.php">' . te('nav.links') . '</a>'
+            . '<a href="/">' . te('nav.public') . '</a>'
             . '<form method="post" action="/admin.php" class="inline">'
             . '<input type="hidden" name="csrf" value="' . e($o['csrf'] ?? '') . '">'
-            . '<button type="submit" name="action" value="logout" class="link">Log out</button></form>';
+            . '<button type="submit" name="action" value="logout" class="link">' . te('nav.logout') . '</button></form>';
     } elseif ($nav === 'public') {
-        $links = '<a href="https://github.com/iDreamSkies/lnks#api" target="_blank" rel="noopener">API</a>'
-            . '<a href="/admin.php">Admin</a>';
+        $links = '<a href="https://github.com/iDreamSkies/lnks#api" target="_blank" rel="noopener">' . te('nav.api') . '</a>'
+            . '<a href="/admin.php">' . te('nav.admin') . '</a>';
     }
 
     $foot = '';
@@ -91,14 +110,15 @@ function renderLayout(string $title, string $body, array $o = []): void {
         $foot .= '<a href="' . e($l['url']) . '" target="_blank" rel="noopener">' . e($l['label']) . '</a>';
     }
 
-    echo '<!doctype html><html lang="en"><head>' . $head . '</head><body>'
+    echo '<!doctype html><html lang="' . currentLang() . '"><head>' . $head . '</head>'
+        . '<body data-copied="' . te('js.copied') . '" data-copyfail="' . te('js.copyfail') . '">'
         . '<header class="site-header"><div class="header-inner">'
         . '<a class="brand" href="/">' . e($app) . '<span class="accent">.</span></a>'
-        . '<nav class="nav">' . $links . '</nav></div></header>'
+        . '<nav class="nav">' . $links . langSwitcher() . '</nav></div></header>'
         . '<main class="container' . (!empty($o['narrow']) ? ' narrow' : '') . '">' . $body . '</main>'
         . '<footer class="site-footer"><div class="footer-inner">'
-        . '<nav class="footer-links" aria-label="Support">' . $foot . '</nav>'
-        . '<p class="muted small">lnks v' . e(LNKS_VERSION) . ' · MIT · built by '
+        . '<nav class="footer-links" aria-label="' . te('footer.support') . '">' . $foot . '</nav>'
+        . '<p class="muted small">lnks v' . e(LNKS_VERSION) . ' · MIT · ' . te('footer.built_by') . ' '
         . '<a href="https://dreamskies.dev" target="_blank" rel="noopener">DreamSkies</a></p>'
         . '</div></footer>'
         . '<script src="/public/app.js?v=' . $v . '" defer></script>'

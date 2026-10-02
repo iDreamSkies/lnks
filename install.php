@@ -6,37 +6,40 @@
 
 $root = __DIR__;
 require_once $root . '/layout.php';
+currentLang();   // resolve the language (and save ?lang=…) before any output
 
 /* ── Lock: never run twice ───────────────────────────────────────── */
 if (file_exists($root . '/config.php')) {
     http_response_code(403);
-    installPage('Already installed', '
-        <h1>Already installed</h1>
-        <p class="muted">config.php already exists. For security, the installer is disabled.</p>
-        <p class="muted">To reconfigure, edit config.php manually or delete it and reload this page.</p>
-        <p><a href="/">Go to homepage</a> · <a href="/admin.php">Admin panel</a></p>
+    installPage(t('inst.already'), '
+        <h1>' . te('inst.already') . '</h1>
+        <p class="muted">' . te('inst.already_1') . '</p>
+        <p class="muted">' . te('inst.already_2') . '</p>
+        <p><a href="/">' . te('inst.home') . '</a> · <a href="/admin.php">' . te('nav.admin') . '</a></p>
     ');
     exit;
 }
 
 /* ── Environment checks ──────────────────────────────────────────── */
 $checks = [
-    'PHP 8.0+'            => PHP_VERSION_ID >= 80000,
-    'PDO SQLite'          => extension_loaded('pdo_sqlite'),
-    'storage/ writable'   => is_writable($root . '/storage') || @mkdir($root . '/storage', 0775, true),
-    'root dir writable'   => is_writable($root), // needed to write config.php
+    t('inst.chk_php')     => PHP_VERSION_ID >= 80000,
+    t('inst.chk_sqlite')  => extension_loaded('pdo_sqlite'),
+    t('inst.chk_storage') => is_writable($root . '/storage') || @mkdir($root . '/storage', 0775, true),
+    t('inst.chk_root')    => is_writable($root), // needed to write config.php
 ];
 $envOk = !in_array(false, $checks, true);
 
 /* ── Handle submit ───────────────────────────────────────────────── */
 $errors = [];
+$user   = trim((string)($_POST['username'] ?? 'admin'));
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $envOk) {
-    $pass1 = $_POST['password'] ?? '';
-    $pass2 = $_POST['password2'] ?? '';
+    $pass1 = (string)($_POST['password'] ?? '');
+    $pass2 = (string)($_POST['password2'] ?? '');
     $publicForm = isset($_POST['public_form']);
 
-    if (strlen($pass1) < 8)   $errors[] = 'Password must be at least 8 characters.';
-    if ($pass1 !== $pass2)    $errors[] = 'Passwords do not match.';
+    if (!preg_match('~^[A-Za-z0-9_.@-]{3,32}$~', $user)) $errors[] = t('inst.err_user');
+    if (strlen($pass1) < 8)                              $errors[] = t('inst.err_pass');
+    if ($pass1 !== $pass2)                               $errors[] = t('inst.err_match');
 
     if (!$errors) {
         $hash  = password_hash($pass1, PASSWORD_BCRYPT);
@@ -51,7 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $envOk) {
             . "    'app_name'   => 'lnks',\n"
             . "    'base_url'   => " . var_export($baseUrl, true) . ",\n"
             . "    'timezone'   => 'UTC',\n"
+            . "    'lang'       => 'auto',   // 'auto' (browser language), 'en' or 'ru'\n"
             . "    'db_path'    => __DIR__ . '/storage/lnks.sqlite',\n"
+            . "    'admin_user' => " . var_export($user, true) . ",\n"
             . "    'admin_pass_hash' => " . var_export($hash, true) . ",\n"
             . "    'api_token'  => " . var_export($token, true) . ",\n"
             . "    'public_form' => " . var_export($publicForm, true) . ",\n"
@@ -63,23 +68,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $envOk) {
             . "];\n";
 
         if (file_put_contents($root . '/config.php', $config, LOCK_EX) === false) {
-            $errors[] = 'Could not write config.php — check directory permissions.';
+            $errors[] = t('inst.err_write');
         } else {
             @chmod($root . '/config.php', 0640);
             // Initialize the database right away
             require $root . '/bootstrap.php';
             db();
 
-            installPage('Installed', '
-                <h1>Done<span class="accent">.</span></h1>
-                <p>lnks is installed and ready.</p>
+            installPage(t('inst.done'), '
+                <h1>' . te('inst.done') . '<span class="accent">.</span></h1>
+                <p>' . te('inst.ready') . '</p>
                 <div class="kv">
-                    <div><span class="muted">Admin panel</span><br><a href="/admin.php">' . e($baseUrl) . '/admin.php</a></div>
-                    <div><span class="muted">API token</span><br><code>' . e($token) . '</code></div>
+                    <div><span class="muted">' . te('inst.admin_panel') . '</span><br><a href="/admin.php">' . e($baseUrl) . '/admin.php</a></div>
+                    <div><span class="muted">' . te('inst.login') . '</span><br><code>' . e($user) . '</code></div>
+                    <div><span class="muted">' . te('inst.api_token') . '</span><br><code>' . e($token) . '</code></div>
                 </div>
-                <p class="muted">Save the API token now — it is stored only in config.php.
-                For extra safety you may delete install.php from the server.</p>
-                <p><a href="/">Go to homepage</a></p>
+                <p class="muted">' . te('inst.save_note') . '</p>
+                <p><a href="/">' . te('inst.home') . '</a></p>
             ');
             exit;
         }
@@ -94,26 +99,27 @@ foreach ($checks as $name => $ok) {
 }
 
 $errorHtml = '';
-foreach ($errors as $e) {
-    $errorHtml .= '<p class="error">' . e($e) . '</p>';
+foreach ($errors as $err) {
+    $errorHtml .= '<p class="error">' . e($err) . '</p>';
 }
 
-installPage('Install', '
-    <h1>Setup<span class="accent">.</span></h1>
+installPage(t('inst.title'), '
+    <h1>' . te('inst.title') . '<span class="accent">.</span></h1>
     <ul class="checks">' . $checkRows . '</ul>
     ' . ($envOk ? '
     ' . $errorHtml . '
     <form method="post" class="login">
-        <input type="password" name="password" placeholder="Admin password (min 8 chars)" required minlength="8">
-        <input type="password" name="password2" placeholder="Repeat password" required minlength="8">
+        <input type="text" name="username" placeholder="' . te('inst.username') . '" value="' . e($user) . '" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.@\-]{3,32}" autocomplete="username">
+        <input type="password" name="password" placeholder="' . te('inst.password') . '" required minlength="8" autocomplete="new-password">
+        <input type="password" name="password2" placeholder="' . te('inst.password2') . '" required minlength="8" autocomplete="new-password">
         <label class="checkbox">
             <input type="checkbox" name="public_form" checked>
-            Allow anyone to shorten links from the homepage
+            ' . te('inst.public') . '
         </label>
-        <button type="submit" class="btn">Install</button>
+        <button type="submit" class="btn">' . te('inst.install') . '</button>
     </form>
-    <p class="muted small">The API token will be generated automatically and shown after install.</p>
-    ' : '<p class="error">Fix the failed checks above, then reload this page.</p>') . '
+    <p class="muted small">' . te('inst.token_note') . '</p>
+    ' : '<p class="error">' . te('inst.fix') . '</p>') . '
 ');
 
 /* ── Standalone layout (works before config exists) ─────────────── */

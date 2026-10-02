@@ -26,7 +26,7 @@ if ($uri !== '' && preg_match('~^[a-zA-Z0-9]{4,12}$~', $uri)) {
 
     if (!$link || (int)$link['status'] !== 1) {
         http_response_code(404);
-        renderLayout('Not found', notFoundBody('This short link does not exist or was disabled.'), ['nav' => 'public']);
+        renderLayout(t('nf.title'), notFoundBody(t('nf.link')), ['nav' => 'public']);
         exit;
     }
 
@@ -40,7 +40,7 @@ if ($uri !== '' && preg_match('~^[a-zA-Z0-9]{4,12}$~', $uri)) {
 if ($uri !== '') {
     http_response_code(404);
     header('X-Robots-Tag: noindex');
-    renderLayout('Not found', notFoundBody('Page not found.'), ['nav' => 'public']);
+    renderLayout(t('nf.title'), notFoundBody(t('nf.page')), ['nav' => 'public']);
     exit;
 }
 
@@ -51,12 +51,12 @@ $error  = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfCheck();
     if (!cfg()['public_form'] && !isAdmin()) {
-        $error = 'Public shortening is disabled on this instance.';
+        $error = t('home.disabled');
     } else {
         $pdo = db();
         $ip  = clientIp();
         if (!isAdmin() && !rateLimitOk($pdo, $ip)) {
-            $error = 'Rate limit reached. Try again later.';
+            $error = t('home.rate');
         } else {
             $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip);
             if ($r['ok']) $result = $r; else $error = $r['error'];
@@ -70,12 +70,12 @@ if ($canShorten) {
     $formHtml = '
     <form method="post" class="shorten" action="/">
         ' . csrfField() . '
-        <label class="sr-only" for="url">Long URL</label>
+        <label class="sr-only" for="url">' . te('home.url_label') . '</label>
         <input type="url" id="url" name="url" placeholder="https://example.com/very/long/url" required maxlength="2048" autofocus>
-        <button type="submit" class="btn">Shorten</button>
+        <button type="submit" class="btn">' . te('btn.shorten') . '</button>
     </form>';
 } else {
-    $formHtml = '<p class="notice">This instance is private. Use the <a href="/admin.php">admin panel</a> or the API.</p>';
+    $formHtml = '<p class="notice">' . te('home.private') . ' <a href="/admin.php">' . te('nav.admin') . '</a></p>';
 }
 
 $resultHtml = '';
@@ -83,31 +83,31 @@ if ($result) {
     $resultHtml = '
     <div class="result" role="status">
         <input type="text" value="' . e($result['short_url']) . '" readonly data-select aria-label="Short URL">
-        <button type="button" class="btn" data-copy="' . e($result['short_url']) . '">Copy</button>
+        <button type="button" class="btn" data-copy="' . e($result['short_url']) . '">' . te('btn.copy') . '</button>
     </div>
-    <p class="muted small">Points to ' . e(mb_strimwidth($result['url'], 0, 80, '…')) . '</p>';
+    <p class="muted small">' . te('home.points_to', ['url' => mb_strimwidth($result['url'], 0, 80, '…')]) . '</p>';
 } elseif ($error) {
     $resultHtml = '<p class="alert error" role="alert">' . e($error) . '</p>';
 }
 
-renderLayout('URL shortener', '
+renderLayout(t('home.title'), '
     <section class="hero">
-        <h1>Short links,<br>no strings<span class="accent">.</span></h1>
-        <p class="tagline">Minimal self-hosted URL shortener. No accounts, no tracking pixels, no bloat.</p>
+        <h1>' . te('home.h1_a') . '<br>' . te('home.h1_b') . '<span class="accent">.</span></h1>
+        <p class="tagline">' . te('home.tagline') . '</p>
         ' . $formHtml . $resultHtml . '
     </section>
     <section class="features">
-        <div class="card"><h2>Fast</h2><p class="muted">Plain PHP and SQLite. A redirect is a single indexed lookup.</p></div>
-        <div class="card"><h2>Private</h2><p class="muted">No third-party scripts. Bots and prefetches are not counted as clicks.</p></div>
-        <div class="card"><h2>Open</h2><p class="muted">MIT licensed. Create links here, in the admin panel or over the REST API.</p></div>
+        <div class="card"><h2>' . te('home.f1_t') . '</h2><p class="muted">' . te('home.f1_d') . '</p></div>
+        <div class="card"><h2>' . te('home.f2_t') . '</h2><p class="muted">' . te('home.f2_d') . '</p></div>
+        <div class="card"><h2>' . te('home.f3_t') . '</h2><p class="muted">' . te('home.f3_d') . '</p></div>
     </section>
 ', [
     'nav'         => 'public',
     'index'       => true,
     'canonical'   => baseUrl() . '/',
-    'description' => 'Free self-hosted URL shortener: create short links, count clicks, manage everything from a simple admin panel or REST API.',
+    'description' => t('home.meta_desc'),
 ]);
 
 function notFoundBody(string $msg): string {
-    return '<section class="hero"><h1>404</h1><p class="tagline">' . e($msg) . '</p><p><a class="btn" href="/">Back to homepage</a></p></section>';
+    return '<section class="hero"><h1>404</h1><p class="tagline">' . e($msg) . '</p><p><a class="btn" href="/">' . te('nf.back') . '</a></p></section>';
 }

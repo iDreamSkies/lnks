@@ -9,6 +9,12 @@ return [
     'timezone'   => 'UTC',
     'db_path'    => __DIR__ . '/storage/lnks.sqlite',
 
+    // Interface language: 'auto' (browser language), 'en' or 'ru'. Visitors can switch it with the EN | RU toggle.
+    'lang'       => 'auto',
+
+    // Admin panel login (username). Sign-in needs this username AND the password below.
+    'admin_user' => 'admin',
+
     // Admin panel password. Generate a hash with:
     //   php -r "echo password_hash('your-password', PASSWORD_BCRYPT), PHP_EOL;"
     'admin_pass_hash' => '',

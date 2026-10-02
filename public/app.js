@@ -2,6 +2,8 @@
 (function () {
     'use strict';
 
+    var msg = document.body.dataset;   // translated labels come from <body data-copied data-copyfail>
+
     function copyText(text) {
         if (navigator.clipboard && window.isSecureContext) {
             return navigator.clipboard.writeText(text);
@@ -24,9 +26,9 @@
         if (btn) {
             var label = btn.textContent;
             copyText(btn.getAttribute('data-copy')).then(function () {
-                btn.textContent = 'Copied!';
+                btn.textContent = msg.copied || 'Copied!';
             }, function () {
-                btn.textContent = 'Press Ctrl+C';
+                btn.textContent = msg.copyfail || 'Press Ctrl+C';
             }).then(function () {
                 setTimeout(function () { btn.textContent = label; }, 1500);
             });

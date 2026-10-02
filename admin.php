@@ -15,11 +15,14 @@ $ip  = clientIp();
 $loginError = null;
 if (!isAdmin() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
     csrfCheck();
+    // Always check both fields (no early exit on a wrong username) so timing does not reveal which one failed.
+    $userOk = hash_equals((string)$cfg['admin_user'], trim((string)($_POST['username'] ?? '')));
+    $passOk = $cfg['admin_pass_hash'] !== '' && password_verify((string)$_POST['password'], $cfg['admin_pass_hash']);
     if ($cfg['admin_pass_hash'] === '') {
-        $loginError = 'Admin password is not configured. Set admin_pass_hash in config.php.';
+        $loginError = t('login.no_pass');
     } elseif (loginBlocked($pdo, $ip)) {
-        $loginError = 'Too many failed attempts. Try again in 15 minutes.';
-    } elseif (password_verify((string)$_POST['password'], $cfg['admin_pass_hash'])) {
+        $loginError = t('login.blocked');
+    } elseif ($userOk && $passOk) {
         session_regenerate_id(true);
         $_SESSION['admin'] = true;
         $pdo->prepare('DELETE FROM login_attempts WHERE ip = :ip')->execute([':ip' => $ip]);
@@ -27,21 +30,23 @@ if (!isAdmin() && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['passwor
         exit;
     } else {
         loginFailed($pdo, $ip);
-        $loginError = 'Wrong password.';
+        $loginError = t('login.wrong');
         usleep(400000);
     }
 }
 
 if (!isAdmin()) {
-    renderLayout('Admin login', '
+    renderLayout(t('login.title'), '
         <section class="hero">
-            <h1>Admin login</h1>
+            <h1>' . te('login.title') . '</h1>
             ' . ($loginError ? '<p class="alert error" role="alert">' . e($loginError) . '</p>' : '') . '
             <form method="post" class="login">
                 ' . csrfField() . '
-                <label class="sr-only" for="password">Password</label>
-                <input type="password" id="password" name="password" placeholder="Password" required autofocus autocomplete="current-password">
-                <button type="submit" class="btn">Sign in</button>
+                <label class="sr-only" for="username">' . te('login.username') . '</label>
+                <input type="text" id="username" name="username" placeholder="' . te('login.username') . '" value="' . e((string)($_POST['username'] ?? '')) . '" required autofocus autocomplete="username" maxlength="64">
+                <label class="sr-only" for="password">' . te('login.password') . '</label>
+                <input type="password" id="password" name="password" placeholder="' . te('login.password') . '" required autocomplete="current-password">
+                <button type="submit" class="btn">' . te('login.submit') . '</button>
             </form>
         </section>
     ', ['nav' => 'public', 'narrow' => true]);
@@ -75,15 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             exit;
         case 'toggle':
             $pdo->prepare('UPDATE links SET status = 1 - status WHERE id = :i')->execute([':i' => $id]);
-            flash('ok', 'Link updated.');
+            flash('ok', t('flash.updated'));
             break;
         case 'delete':
             $pdo->prepare('DELETE FROM links WHERE id = :i')->execute([':i' => $id]);
-            flash('ok', 'Link deleted.');
+            flash('ok', t('flash.deleted'));
             break;
         case 'create':
             $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, (string)($_POST['title'] ?? ''));
-            $r['ok'] ? flash('ok', 'Created ' . $r['short_url']) : flash('error', $r['error']);
+            $r['ok'] ? flash('ok', t('flash.created', ['url' => $r['short_url']])) : flash('error', $r['error']);
             break;
     }
     redirectBack();
@@ -103,7 +108,7 @@ if (isset($_GET['id'])) {
     $l = $st->fetch();
     if (!$l) {
         http_response_code(404);
-        renderLayout('Not found', '<p class="alert error">Link not found.</p><p><a href="/admin.php">← Back to links</a></p>', $opts);
+        renderLayout(t('nf.title'), '<p class="alert error">' . te('stats.not_found') . '</p><p><a href="/admin.php">' . te('stats.back') . '</a></p>', $opts);
         exit;
     }
 
@@ -119,10 +124,10 @@ if (isset($_GET['id'])) {
     foreach ($refs as $host => $c) {
         $refRows .= '<tr><td>' . e($host) . '</td><td class="num">' . $c . '</td></tr>';
     }
-    if ($refRows === '') $refRows = '<tr><td colspan="2" class="muted center">No clicks yet.</td></tr>';
+    if ($refRows === '') $refRows = '<tr><td colspan="2" class="muted center">' . te('stats.no_clicks') . '</td></tr>';
 
-    renderLayout('Stats ' . $l['code'], '
-        <p><a href="/admin.php">← All links</a></p>
+    renderLayout(t('stats.title', ['code' => $l['code']]), '
+        <p><a href="/admin.php">' . te('stats.back') . '</a></p>
         ' . $flashHtml . '
         <div class="topbar">
             <div>
@@ -130,23 +135,23 @@ if (isset($_GET['id'])) {
                 <p class="muted break">' . ($l['title'] ? e($l['title']) . ' · ' : '') . e($l['url']) . '</p>
             </div>
             <div class="row-actions">
-                <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">Copy</button>
-                <span class="badge ' . ((int)$l['status'] === 1 ? 'on' : 'off') . '">' . ((int)$l['status'] === 1 ? 'Active' : 'Disabled') . '</span>
+                <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
+                <span class="badge ' . ((int)$l['status'] === 1 ? 'on' : 'off') . '">' . ((int)$l['status'] === 1 ? te('status.active') : te('status.disabled')) . '</span>
             </div>
         </div>
         <div class="tiles">
-            <div class="tile"><span class="tile-n">' . (int)$l['clicks_total'] . '</span><span class="muted">Total clicks</span></div>
-            <div class="tile"><span class="tile-n">' . $last30 . '</span><span class="muted">Last 30 days</span></div>
-            <div class="tile"><span class="tile-n small-n">' . e($l['last_click_at'] ?? '—') . '</span><span class="muted">Last click (UTC)</span></div>
-            <div class="tile"><span class="tile-n small-n">' . e($l['created_at']) . '</span><span class="muted">Created (UTC)</span></div>
+            <div class="tile"><span class="tile-n">' . (int)$l['clicks_total'] . '</span><span class="muted">' . te('stats.total') . '</span></div>
+            <div class="tile"><span class="tile-n">' . $last30 . '</span><span class="muted">' . te('stats.last30') . '</span></div>
+            <div class="tile"><span class="tile-n small-n">' . e($l['last_click_at'] ?? '—') . '</span><span class="muted">' . te('stats.last_click') . '</span></div>
+            <div class="tile"><span class="tile-n small-n">' . e($l['created_at']) . '</span><span class="muted">' . te('stats.created') . '</span></div>
         </div>
         <section class="card">
-            <h2>Clicks, last 30 days</h2>
+            <h2>' . te('stats.chart') . '</h2>
             ' . barsSvg($daily, 600, 120, 'chart', $labels) . '
             <div class="chart-axis muted small"><span>' . e(array_key_first($daily)) . '</span><span>' . e(array_key_last($daily)) . '</span></div>
         </section>
         <section class="card">
-            <h2>Top referrers</h2>
+            <h2>' . te('stats.refs') . '</h2>
             <table class="plain-table"><tbody>' . $refRows . '</tbody></table>
         </section>
     ', $opts);
@@ -210,29 +215,29 @@ foreach ($links as $l) {
     $short  = baseUrl() . '/' . $l['code'];
     $active = (int)$l['status'] === 1;
     $rows .= '<tr' . ($active ? '' : ' class="disabled"') . '>
-        <td data-label="Link">
+        <td data-label="' . te('th.link') . '">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
-            ' . ($active ? '' : '<span class="badge off">Disabled</span>') . '
+            ' . ($active ? '' : '<span class="badge off">' . te('status.disabled') . '</span>') . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
         </td>
-        <td data-label="Destination" class="url"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
+        <td data-label="' . te('th.dest') . '" class="url"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
             <div class="muted small ellipsis">' . e($l['url']) . '</div></td>
-        <td data-label="Clicks" class="num"><span class="n">' . (int)$l['clicks_total'] . '</span>' . barsSvg($sparks[(int)$l['id']], 56, 20, 'spark', array_combine(array_keys($sparks[(int)$l['id']]), array_keys($sparks[(int)$l['id']]))) . '</td>
-        <td data-label="Last click" class="muted nowrap">' . e($l['last_click_at'] ?? '—') . '</td>
-        <td data-label="Created" class="muted nowrap">' . e(substr($l['created_at'], 0, 10)) . '</td>
+        <td data-label="' . te('th.clicks') . '" class="num"><span class="n">' . (int)$l['clicks_total'] . '</span>' . barsSvg($sparks[(int)$l['id']], 56, 20, 'spark', array_combine(array_keys($sparks[(int)$l['id']]), array_keys($sparks[(int)$l['id']]))) . '</td>
+        <td data-label="' . te('th.last') . '" class="muted nowrap">' . e($l['last_click_at'] ?? '—') . '</td>
+        <td data-label="' . te('th.created') . '" class="muted nowrap">' . e(substr($l['created_at'], 0, 10)) . '</td>
         <td class="actions">
             <form method="post">' . csrfField() . '
                 <input type="hidden" name="id" value="' . (int)$l['id'] . '">
                 <input type="hidden" name="back" value="' . e($back) . '">
-                <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">Copy</button>
-                <button name="action" value="toggle" class="btn ghost sm">' . ($active ? 'Disable' : 'Enable') . '</button>
-                <button name="action" value="delete" class="btn danger sm" data-confirm="Delete this link and its click history?">Delete</button>
+                <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
+                <button name="action" value="toggle" class="btn ghost sm">' . ($active ? te('btn.disable') : te('btn.enable')) . '</button>
+                <button name="action" value="delete" class="btn danger sm" data-confirm="' . te('confirm.delete') . '">' . te('btn.delete') . '</button>
             </form>
         </td>
     </tr>';
 }
 if ($rows === '') {
-    $rows = '<tr><td colspan="6" class="muted center empty">' . ($q !== '' || $status !== 'all' ? 'Nothing matches the filters.' : 'No links yet — create the first one above.') . '</td></tr>';
+    $rows = '<tr><td colspan="6" class="muted center empty">' . ($q !== '' || $status !== 'all' ? te('empty.filtered') : te('empty.none')) . '</td></tr>';
 }
 
 // Compact pager: first, current ±2, last
@@ -240,7 +245,7 @@ $pager = '';
 if ($pages > 1) {
     $show = array_unique(array_filter([1, $page - 2, $page - 1, $page, $page + 1, $page + 2, $pages], fn($p) => $p >= 1 && $p <= $pages));
     sort($show);
-    $pager = '<nav class="pager" aria-label="Pages">';
+    $pager = '<nav class="pager" aria-label="' . te('pager.aria') . '">';
     if ($page > 1) $pager .= '<a href="' . e(adminUrl($filters + ['page' => $page - 1])) . '">←</a>';
     $prev = 0;
     foreach ($show as $p) {
@@ -256,37 +261,37 @@ if ($pages > 1) {
 
 $opt = fn(string $v, string $label, string $cur) => '<option value="' . $v . '"' . ($v === $cur ? ' selected' : '') . '>' . $label . '</option>';
 
-renderLayout('Links', '
-    <div class="topbar"><h1>Links</h1></div>
+renderLayout(t('list.title'), '
+    <div class="topbar"><h1>' . te('list.title') . '</h1></div>
     ' . $flashHtml . '
 
     <div class="tiles">
-        <div class="tile"><span class="tile-n">' . (int)$sum['total'] . '</span><span class="muted">Links (' . (int)$sum['active'] . ' active)</span></div>
-        <div class="tile"><span class="tile-n">' . (int)$sum['clicks'] . '</span><span class="muted">Total clicks</span></div>
-        <div class="tile"><span class="tile-n">' . $today . '</span><span class="muted">Clicks today</span></div>
-        <div class="tile"><span class="tile-n">' . $week . '</span><span class="muted">Clicks, 7 days</span></div>
+        <div class="tile"><span class="tile-n">' . (int)$sum['total'] . '</span><span class="muted">' . te('tile.links', ['n' => (int)$sum['active']]) . '</span></div>
+        <div class="tile"><span class="tile-n">' . (int)$sum['clicks'] . '</span><span class="muted">' . te('tile.clicks') . '</span></div>
+        <div class="tile"><span class="tile-n">' . $today . '</span><span class="muted">' . te('tile.today') . '</span></div>
+        <div class="tile"><span class="tile-n">' . $week . '</span><span class="muted">' . te('tile.week') . '</span></div>
     </div>
 
     <form method="post" class="shorten card">
         ' . csrfField() . '
         <input type="hidden" name="action" value="create">
-        <input type="url" name="url" placeholder="https://example.com/long/url" required maxlength="2048" aria-label="Long URL">
-        <input type="text" name="title" placeholder="Title (optional)" maxlength="120" aria-label="Title" class="title-in">
-        <button type="submit" class="btn">Shorten</button>
+        <input type="url" name="url" placeholder="https://example.com/long/url" required maxlength="2048" aria-label="' . te('form.url_label') . '">
+        <input type="text" name="title" placeholder="' . te('form.title_ph') . '" maxlength="120" aria-label="' . te('form.title_ph') . '" class="title-in">
+        <button type="submit" class="btn">' . te('btn.shorten') . '</button>
     </form>
 
     <form method="get" class="filters">
-        <input type="search" name="q" value="' . e($q) . '" placeholder="Search code, title or URL…" aria-label="Search">
-        <select name="status" aria-label="Status">' . $opt('all', 'All', $status) . $opt('active', 'Active', $status) . $opt('disabled', 'Disabled', $status) . '</select>
-        <select name="sort" aria-label="Sort">' . $opt('new', 'Newest', $sort) . $opt('old', 'Oldest', $sort) . $opt('clicks', 'Most clicks', $sort) . $opt('last', 'Last clicked', $sort) . '</select>
-        <button type="submit" class="btn ghost">Apply</button>
-        ' . ($q !== '' || $status !== 'all' || $sort !== 'new' ? '<a href="/admin.php" class="btn ghost">Reset</a>' : '') . '
+        <input type="search" name="q" value="' . e($q) . '" placeholder="' . te('filter.search_ph') . '" aria-label="' . te('filter.search') . '">
+        <select name="status" aria-label="' . te('filter.status') . '">' . $opt('all', te('filter.all'), $status) . $opt('active', te('filter.active'), $status) . $opt('disabled', te('filter.disabled'), $status) . '</select>
+        <select name="sort" aria-label="' . te('filter.sort') . '">' . $opt('new', te('sort.new'), $sort) . $opt('old', te('sort.old'), $sort) . $opt('clicks', te('sort.clicks'), $sort) . $opt('last', te('sort.last'), $sort) . '</select>
+        <button type="submit" class="btn ghost">' . te('filter.apply') . '</button>
+        ' . ($q !== '' || $status !== 'all' || $sort !== 'new' ? '<a href="/admin.php" class="btn ghost">' . te('filter.reset') . '</a>' : '') . '
     </form>
-    <p class="muted small">' . $total . ' result' . ($total === 1 ? '' : 's') . ' · times in UTC · sparkline = last 7 days</p>
+    <p class="muted small">' . te('list.results', ['n' => $total]) . '</p>
 
     <div class="table-wrap">
     <table class="links">
-        <thead><tr><th>Link</th><th>Destination</th><th class="num">Clicks</th><th>Last click</th><th>Created</th><th></th></tr></thead>
+        <thead><tr><th>' . te('th.link') . '</th><th>' . te('th.dest') . '</th><th class="num">' . te('th.clicks') . '</th><th>' . te('th.last') . '</th><th>' . te('th.created') . '</th><th></th></tr></thead>
         <tbody>' . $rows . '</tbody>
     </table>
     </div>

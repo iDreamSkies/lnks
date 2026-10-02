@@ -11,6 +11,7 @@
  * Header: Authorization: Bearer <api_token>
  */
 require __DIR__ . '/bootstrap.php';
+currentLang('en');   // machine-readable API: messages are always English
 
 $token = cfg()['api_token'];
 if ($token === '') {
