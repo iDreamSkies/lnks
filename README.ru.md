@@ -2,6 +2,7 @@
 ![PHP 8.0+](https://img.shields.io/badge/PHP-8.0%2B-777bb4.svg)
 ![SQLite](https://img.shields.io/badge/SQLite-zero%20config-003b57.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-success.svg)
+[![Tests](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml/badge.svg)](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml)
 
 [English](README.md) · **Русский**
 
@@ -249,7 +250,7 @@ php tests/run.php          # все проверки
 php tests/run.php qr       # только тесты, в названии которых есть «qr»
 ```
 
-Нужен только PHP CLI с `pdo_sqlite`, PHPUnit не требуется. Раннер поднимает временную копию приложения на встроенном сервере PHP, проверяет её через HTTP и удаляет после себя. Ваши `config.php` и база не затрагиваются.
+Нужен только PHP CLI с `pdo_sqlite`, PHPUnit не требуется. GitHub Actions прогоняет тесты на PHP 8.0, 8.1, 8.2 и 8.3, а также на PHP 8.0 без `mbstring` и `ctype`. Раннер поднимает временную копию приложения на встроенном сервере PHP, проверяет её через HTTP и удаляет после себя. Ваши `config.php` и база не затрагиваются.
 
 ## Сторонний код
 
