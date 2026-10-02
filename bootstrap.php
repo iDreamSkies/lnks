@@ -203,7 +203,7 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = 
         return ['ok' => false, 'error' => t('err.self')];
     }
     $title = $title !== null ? trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', $title)) : '';
-    $title = $title === '' ? null : mb_substr($title, 0, 120);
+    $title = $title === '' ? null : cut($title, 120);
 
     // The UNIQUE constraint is the source of truth; retry on a (very rare) race.
     for ($try = 0; $try < 3; $try++) {

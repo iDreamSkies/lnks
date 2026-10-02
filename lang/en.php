@@ -13,6 +13,12 @@ return [
     'js.copied'   => 'Copied!',
     'js.copyfail' => 'Press Ctrl+C',
 
+    'qr.button'   => 'QR',
+    'qr.title'    => 'QR code',
+    'qr.png'      => 'Download PNG',
+    'qr.svg'      => 'Download SVG',
+    'qr.close'    => 'Close',
+
     // support links
     'support.title'    => 'Help & support',
     'support.telegram' => 'Telegram',

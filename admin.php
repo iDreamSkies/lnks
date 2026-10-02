@@ -99,7 +99,7 @@ unset($_SESSION['flash']);
 $flashHtml = $flash
     ? '<p class="alert ' . ($flash['type'] === 'ok' ? 'ok' : 'error') . '" role="status">' . e($flash['msg']) . '</p>'
     : '';
-$opts = ['nav' => 'admin', 'csrf' => csrfToken()];
+$opts = ['nav' => 'admin', 'csrf' => csrfToken(), 'scripts' => [QR_SCRIPT]];
 
 /* ── Per-link stats page ─────────────────────────────────────────── */
 if (isset($_GET['id'])) {
@@ -136,6 +136,7 @@ if (isset($_GET['id'])) {
             </div>
             <div class="row-actions">
                 <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
+                ' . qrButton($short, $l['code']) . '
                 <span class="badge ' . ((int)$l['status'] === 1 ? 'on' : 'off') . '">' . ((int)$l['status'] === 1 ? te('status.active') : te('status.disabled')) . '</span>
             </div>
         </div>
@@ -230,6 +231,7 @@ foreach ($links as $l) {
                 <input type="hidden" name="id" value="' . (int)$l['id'] . '">
                 <input type="hidden" name="back" value="' . e($back) . '">
                 <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
+                ' . qrButton($short, $l['code']) . '
                 <button name="action" value="toggle" class="btn ghost sm">' . ($active ? te('btn.disable') : te('btn.enable')) . '</button>
                 <button name="action" value="delete" class="btn danger sm" data-confirm="' . te('confirm.delete') . '">' . te('btn.delete') . '</button>
             </form>
