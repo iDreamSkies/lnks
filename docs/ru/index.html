@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lnks — сокращатель ссылок, который работает на любом PHP-хостинге</title>
+<meta name="description" content="Бесплатный сокращатель ссылок с открытым кодом на PHP + SQLite. Залейте по FTP, откройте в браузере — готово: без SSH, MySQL и Composer. QR-коды, статистика, UTM, пароли, импорт CSV из YOURLS.">
+<link rel="canonical" href="https://idreamskies.github.io/lnks/ru/">
+<link rel="alternate" hreflang="en" href="https://idreamskies.github.io/lnks/">
+<link rel="alternate" hreflang="ru" href="https://idreamskies.github.io/lnks/ru/">
+<link rel="alternate" hreflang="x-default" href="https://idreamskies.github.io/lnks/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="lnks — сокращатель ссылок, который работает на любом PHP-хостинге">
+<meta property="og:description" content="Бесплатный сокращатель ссылок с открытым кодом на PHP + SQLite. Залейте по FTP, откройте в браузере — готово: без SSH, MySQL и Composer. QR-коды, статистика, UTM, пароли, импорт CSV из YOURLS.">
+<meta property="og:url" content="https://idreamskies.github.io/lnks/ru/">
+<meta property="og:image" content="https://idreamskies.github.io/lnks/screenshots/admin.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8ff00'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%230e0f10'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../site.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./">lnks<span>.</span></a>
+  <nav class="top-links" aria-label="Main">
+    <a class="hide-m" href="#features">Возможности</a>
+    <a class="hide-m" href="#install">Установка</a>
+    <a class="hide-m" href="#compare">Сравнение</a>
+    <a href="#support">Поддержать</a>
+    <a href="https://github.com/iDreamSkies/lnks">GitHub</a>
+    <a class="lang" href="../" hreflang="en">English</a>
+  </nav>
+</div></header>
+<main>
+<section class="hero"><div class="wrap">
+  <h1>Свой сокращатель ссылок.<br><span>Без SSH и MySQL.</span></h1>
+  <p class="lead">Залейте несколько PHP-файлов по FTP, откройте домен, задайте пароль — готово. lnks работает на самом дешёвом виртуальном хостинге, хранит всё в одном файле SQLite и ничего не отправляет трекерам.</p>
+  <div class="cta"><a class="btn primary" href="https://github.com/iDreamSkies/lnks/releases/latest">Скачать lnks</a><a class="btn ghost" href="https://github.com/iDreamSkies/lnks">Код на GitHub</a></div>
+  <p class="note">Бесплатно, открытый код (MIT). PHP 8.0+ — вот и все требования.</p>
+  <div class="badge-row"><span class="pill">PHP: <b>8.0+</b></span><span class="pill">База: <b>SQLite</b></span><span class="pill">Зависимости: <b>нет</b></span><span class="pill">Лицензия: <b>MIT</b></span></div>
+</div></section>
+<section id="screens"><div class="wrap">
+  <h2>Как это выглядит</h2><p class="sub">Быстрая админка, удобная и с телефона, на русском и английском, светлая и тёмная.</p>
+  <div class="shots"><figure><div class="shot"><img src="../screenshots/admin.png" alt="Ссылки с графиками кликов, сроками и лимитами" loading="lazy" width="1100" height="760"></div><figcaption>Ссылки с графиками кликов, сроками и лимитами</figcaption></figure><figure><div class="shot"><img src="../screenshots/stats.png" alt="Статистика: дни, часы, устройства, браузеры, страны" loading="lazy" width="1100" height="760"></div><figcaption>Статистика: дни, часы, устройства, браузеры, страны</figcaption></figure><figure><div class="shot"><img src="../screenshots/qr.png" alt="QR-код для каждой ссылки — PNG или SVG" loading="lazy" width="1100" height="760"></div><figcaption>QR-код для каждой ссылки — PNG или SVG</figcaption></figure><figure><div class="shot"><img src="../screenshots/import.png" alt="Импорт CSV, который понимает выгрузку YOURLS" loading="lazy" width="1100" height="760"></div><figcaption>Импорт CSV, который понимает выгрузку YOURLS</figcaption></figure></div>
+</div></section>
+<section id="features"><div class="wrap">
+  <h2>Всё, что нужно сокращателю</h2><p class="sub">И ничего, для чего нужен системный администратор.</p>
+  <div class="grid"><div class="card"><h3>Свои короткие имена</h3><p>/spring-sale вместо /x7Fq2a, на одном или нескольких доменах.</p></div><div class="card"><h3>QR-коды</h3><p>Создаются в браузере, скачиваются в PNG или SVG.</p></div><div class="card"><h3>Статистика</h3><p>Клики по дням и часам, устройства, браузеры, ОС, источники; страны по желанию. IP не хранятся.</p></div><div class="card"><h3>Срок и лимит кликов</h3><p>Ссылка выключается в нужную дату или после N переходов и отвечает 410.</p></div><div class="card"><h3>Ссылки под паролем</h3><p>Перед переходом посетитель вводит пароль.</p></div><div class="card"><h3>UTM-шаблоны</h3><p>utm_source / medium / campaign в один клик.</p></div><div class="card"><h3>Теги и массовые действия</h3><p>Группируйте ссылки, фильтруйте, включайте / выключайте / удаляйте пачкой.</p></div><div class="card"><h3>REST API и CSV</h3><p>Всё из админки есть в API; импорт из YOURLS сохраняет старые ссылки.</p></div></div>
+</div></section>
+<section id="install"><div class="wrap">
+  <h2>Установка за минуту</h2><p class="sub">Работает в cPanel, ISPmanager, Plesk, DirectAdmin и на любом хостинге с PHP 8.0+.</p>
+  <ol class="steps"><li><div><h3>Скачайте</h3><p>Возьмите ZIP последнего релиза и распакуйте.</p></div></li><li><div><h3>Залейте по FTP</h3><p>Скопируйте файлы в папку домена или поддомена (вместе со скрытым .htaccess).</p></div></li><li><div><h3>Откройте сайт</h3><p>Установщик проверит PHP и права и попросит логин и пароль администратора.</p></div></li><li><div><h3>Сокращайте</h3><p>Вставьте ссылку — получите короткую. Админка — /admin.php.</p></div></li></ol>
+  <p class="note">Подробная инструкция, конфиг Nginx и решение проблем: <a href="https://github.com/iDreamSkies/lnks/blob/main/README.ru.md#установка-по-ftp-виртуальный-хостинг-без-ssh">README → Установка по FTP</a></p>
+</div></section>
+<section id="compare"><div class="wrap">
+  <h2>Сравнение</h2><p class="sub">Сверено с репозиториями проектов в октябре 2026.</p>
+  <div class="table-wrap"><table><thead><tr><th></th><th class="us">lnks</th><th>YOURLS</th><th>Shlink</th><th>Kutt</th></tr></thead><tbody><tr><th>Среда</th><td class="us">PHP 8.0+</td><td>PHP 8.1+</td><td>PHP 8.4+</td><td>Node.js 20+</td></tr><tr><th>База данных</th><td class="us">SQLite, создаётся сама</td><td>MySQL / MariaDB</td><td>MySQL, MariaDB, PostgreSQL, SQL Server или SQLite</td><td>SQLite, PostgreSQL или MySQL</td></tr><tr><th>Установка только по FTP</th><td class="us"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="no">✗</span> CLI-установщик</td><td><span class="no">✗</span> процесс Node.js</td></tr><tr><th>Встроенная админка</th><td class="us"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td>отдельный веб-клиент</td><td><span class="yes">✓</span></td></tr><tr><th>QR-коды</th><td class="us"><span class="yes">✓</span></td><td>плагин</td><td>веб-клиент</td><td><span class="yes">✓</span></td></tr><tr><th>Срок / лимит кликов</th><td class="us"><span class="yes">✓</span> / <span class="yes">✓</span></td><td>плагины</td><td><span class="yes">✓</span> / <span class="yes">✓</span></td><td><span class="yes">✓</span> / —</td></tr><tr><th>Импорт CSV</th><td class="us"><span class="yes">✓</span> в т. ч. YOURLS</td><td>плагин</td><td><span class="yes">✓</span> CLI</td><td>—</td></tr></tbody></table></div>
+  <p class="small">Нашли неточность? <a href="https://github.com/iDreamSkies/lnks/issues">Создайте issue</a></p>
+</div></section>
+<section id="support" class="support"><div class="wrap">
+  <h2>Поддержать проект</h2><p class="sub center">lnks бесплатен. Если он сэкономил вам время, можно поддержать разработку.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://pay.oxapay.com/14606636/">Поддержать криптовалютой</a>
+    <a class="btn ghost" href="https://yoomoney.ru/fundraise/1KGTK8NPPQN.260925">ЮMoney (Россия)</a>
+  </div>
+  <p class="note"><a href="https://t.me/dreamskies">Вопросы: Telegram @dreamskies</a></p>
+</div></section>
+</main>
+<footer class="bottom"><div class="wrap">lnks · Лицензия MIT · автор <a href="https://dreamskies.dev">DreamSkies</a> · <a href="https://github.com/iDreamSkies/lnks">GitHub</a> · <a href="https://github.com/iDreamSkies/lnks/issues">Issues</a></div></footer>
+</body>
+</html>
