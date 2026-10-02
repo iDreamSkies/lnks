@@ -63,6 +63,41 @@ function redirectBack(): void {
     exit;
 }
 
+/** Badge for a link state, or '' for active links (keeps the list calm). */
+function stateBadge(string $state, bool $showActive = false): string {
+    $map = ['active' => ['on', 'status.active'], 'disabled' => ['off', 'status.disabled'],
+            'expired' => ['warn', 'status.expired'], 'limit' => ['warn', 'status.limit']];
+    if ($state === 'active' && !$showActive) return '';
+    return '<span class="badge ' . $map[$state][0] . '">' . te($map[$state][1]) . '</span>';
+}
+
+/** "3 d left" / "5 h left" / "12 min left" for a future UTC timestamp. */
+function timeLeft(string $utc): string {
+    $s = strtotime($utc . ' UTC') - time();
+    if ($s >= 86400) return t('left.d', ['n' => (int)floor($s / 86400)]);
+    if ($s >= 3600)  return t('left.h', ['n' => (int)floor($s / 3600)]);
+    return t('left.m', ['n' => max(1, (int)ceil($s / 60))]);
+}
+
+/** Small "expires / clicks of max" line under a link. */
+function limitsLine(array $l): string {
+    $parts = [];
+    if (!empty($l['expires_at'])) {
+        $parts[] = $l['expires_at'] <= now()
+            ? te('expired.on', ['date' => substr($l['expires_at'], 0, 16)])
+            : '<span title="' . e($l['expires_at']) . ' UTC">' . e(timeLeft($l['expires_at'])) . '</span>';
+    }
+    if ($l['max_clicks'] !== null) {
+        $parts[] = te('clicks.of', ['n' => (int)$l['clicks_total'], 'max' => (int)$l['max_clicks']]);
+    }
+    return $parts ? '<div class="muted small">' . implode(' · ', $parts) . '</div>' : '';
+}
+
+/** datetime-local value for a stored UTC timestamp. */
+function dtLocal(?string $utc): string {
+    return $utc ? str_replace(' ', 'T', substr($utc, 0, 16)) : '';
+}
+
 function adminUrl(array $params): string {
     $params = array_filter($params, fn($v) => $v !== '' && $v !== null && $v !== 'all' && $v !== 'new' && $v !== 1);
     return '/admin.php' . ($params ? '?' . http_build_query($params) : '');
@@ -87,8 +122,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('ok', t('flash.deleted'));
             break;
         case 'create':
-            $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, (string)($_POST['title'] ?? ''));
+            $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, [
+                'title'      => (string)($_POST['title'] ?? ''),
+                'expires_at' => (string)($_POST['expires_at'] ?? ''),
+                'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
+            ]);
             $r['ok'] ? flash('ok', t('flash.created', ['url' => $r['short_url']])) : flash('error', $r['error']);
+            break;
+        case 'update':
+            $r = updateLink($pdo, $id, [
+                'title'      => (string)($_POST['title'] ?? ''),
+                'expires_at' => (string)($_POST['expires_at'] ?? ''),
+                'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
+            ]);
+            $r['ok'] ? flash('ok', t('flash.saved')) : flash('error', $r['error']);
             break;
     }
     redirectBack();
@@ -133,11 +180,12 @@ if (isset($_GET['id'])) {
             <div>
                 <h1><a href="' . e($short) . '" target="_blank" rel="noopener">' . e($short) . '</a></h1>
                 <p class="muted break">' . ($l['title'] ? e($l['title']) . ' · ' : '') . e($l['url']) . '</p>
+                ' . limitsLine($l) . '
             </div>
             <div class="row-actions">
                 <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
                 ' . qrButton($short, $l['code']) . '
-                <span class="badge ' . ((int)$l['status'] === 1 ? 'on' : 'off') . '">' . ((int)$l['status'] === 1 ? te('status.active') : te('status.disabled')) . '</span>
+                ' . stateBadge(linkState($l), true) . '
             </div>
         </div>
         <div class="tiles">
@@ -155,12 +203,29 @@ if (isset($_GET['id'])) {
             <h2>' . te('stats.refs') . '</h2>
             <table class="plain-table"><tbody>' . $refRows . '</tbody></table>
         </section>
+        <section class="card">
+            <h2>' . te('stats.settings') . '</h2>
+            <form method="post" class="settings">
+                ' . csrfField() . '
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="id" value="' . (int)$l['id'] . '">
+                <input type="hidden" name="back" value="?id=' . (int)$l['id'] . '">
+                <label>' . te('form.title') . '<input type="text" name="title" value="' . e((string)$l['title']) . '" maxlength="120"></label>
+                <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at" value="' . e(dtLocal($l['expires_at'])) . '"></label>
+                <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" value="' . e((string)$l['max_clicks']) . '" placeholder="' . te('form.max_clicks_ph') . '"></label>
+                <button type="submit" class="btn">' . te('form.save') . '</button>
+            </form>
+            <p class="muted small">' . te('stats.settings_hint') . '</p>
+        </section>
     ', $opts);
     exit;
 }
 
 /* ── Dashboard numbers ───────────────────────────────────────────── */
-$sum = $pdo->query('SELECT COUNT(*) total, COALESCE(SUM(status),0) active, COALESCE(SUM(clicks_total),0) clicks FROM links')->fetch();
+$st = $pdo->prepare('SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN ' . stateSql('active') . ' THEN 1 ELSE 0 END),0) active,
+                      COALESCE(SUM(clicks_total),0) clicks FROM links');
+$st->execute([':now' => now()]);
+$sum = $st->fetch();
 $clicksSince = function (string $since) use ($pdo): int {
     $st = $pdo->prepare('SELECT COUNT(*) FROM clicks WHERE ts >= :t');
     $st->execute([':t' => $since]);
@@ -171,7 +236,7 @@ $week  = $clicksSince(gmdate('Y-m-d H:i:s', time() - 7 * 86400));
 
 /* ── List: search / filter / sort / paging ───────────────────────── */
 $q      = trim((string)($_GET['q'] ?? ''));
-$status = in_array($_GET['status'] ?? '', ['active', 'disabled'], true) ? $_GET['status'] : 'all';
+$status = in_array($_GET['status'] ?? '', ['active', 'expired', 'disabled'], true) ? $_GET['status'] : 'all';
 $sorts  = [
     'new'    => 'id DESC',
     'old'    => 'id ASC',
@@ -189,8 +254,8 @@ if ($q !== '') {
     $params[':q'] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
 }
 if ($status !== 'all') {
-    $conds[] = 'status = :s';
-    $params[':s'] = $status === 'active' ? 1 : 0;
+    $conds[] = stateSql($status);
+    if ($status !== 'disabled') $params[':now'] = now();
 }
 $where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
 
@@ -215,11 +280,13 @@ $rows = '';
 foreach ($links as $l) {
     $short  = baseUrl() . '/' . $l['code'];
     $active = (int)$l['status'] === 1;
-    $rows .= '<tr' . ($active ? '' : ' class="disabled"') . '>
+    $state  = linkState($l);
+    $rows .= '<tr' . ($state === 'active' ? '' : ' class="disabled"') . '>
         <td data-label="' . te('th.link') . '">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
-            ' . ($active ? '' : '<span class="badge off">' . te('status.disabled') . '</span>') . '
+            ' . stateBadge($state) . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
+            ' . limitsLine($l) . '
         </td>
         <td data-label="' . te('th.dest') . '" class="url"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
             <div class="muted small ellipsis">' . e($l['url']) . '</div></td>
@@ -274,17 +341,26 @@ renderLayout(t('list.title'), '
         <div class="tile"><span class="tile-n">' . $week . '</span><span class="muted">' . te('tile.week') . '</span></div>
     </div>
 
-    <form method="post" class="shorten card">
+    <form method="post" class="card create">
         ' . csrfField() . '
         <input type="hidden" name="action" value="create">
-        <input type="url" name="url" placeholder="https://example.com/long/url" required maxlength="2048" aria-label="' . te('form.url_label') . '">
-        <input type="text" name="title" placeholder="' . te('form.title_ph') . '" maxlength="120" aria-label="' . te('form.title_ph') . '" class="title-in">
-        <button type="submit" class="btn">' . te('btn.shorten') . '</button>
+        <div class="shorten">
+            <input type="url" name="url" placeholder="https://example.com/long/url" required maxlength="2048" aria-label="' . te('form.url_label') . '">
+            <input type="text" name="title" placeholder="' . te('form.title_ph') . '" maxlength="120" aria-label="' . te('form.title_ph') . '" class="title-in">
+            <button type="submit" class="btn">' . te('btn.shorten') . '</button>
+        </div>
+        <details class="more">
+            <summary>' . te('form.more') . '</summary>
+            <div class="settings">
+                <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at"></label>
+                <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" placeholder="' . te('form.max_clicks_ph') . '"></label>
+            </div>
+        </details>
     </form>
 
     <form method="get" class="filters">
         <input type="search" name="q" value="' . e($q) . '" placeholder="' . te('filter.search_ph') . '" aria-label="' . te('filter.search') . '">
-        <select name="status" aria-label="' . te('filter.status') . '">' . $opt('all', te('filter.all'), $status) . $opt('active', te('filter.active'), $status) . $opt('disabled', te('filter.disabled'), $status) . '</select>
+        <select name="status" aria-label="' . te('filter.status') . '">' . $opt('all', te('filter.all'), $status) . $opt('active', te('filter.active'), $status) . $opt('expired', te('filter.expired'), $status) . $opt('disabled', te('filter.disabled'), $status) . '</select>
         <select name="sort" aria-label="' . te('filter.sort') . '">' . $opt('new', te('sort.new'), $sort) . $opt('old', te('sort.old'), $sort) . $opt('clicks', te('sort.clicks'), $sort) . $opt('last', te('sort.last'), $sort) . '</select>
         <button type="submit" class="btn ghost">' . te('filter.apply') . '</button>
         ' . ($q !== '' || $status !== 'all' || $sort !== 'new' ? '<a href="/admin.php" class="btn ghost">' . te('filter.reset') . '</a>' : '') . '

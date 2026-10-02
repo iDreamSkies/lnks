@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS links (
     title         TEXT,
     clicks_total  INTEGER NOT NULL DEFAULT 0,
     last_click_at TEXT,
+    expires_at    TEXT,                -- UTC 'Y-m-d H:i:s'; NULL = never
+    max_clicks    INTEGER,             -- NULL = unlimited
     status        INTEGER NOT NULL DEFAULT 1,
     created_ip    TEXT,
     created_at    TEXT NOT NULL

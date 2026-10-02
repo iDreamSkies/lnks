@@ -10,6 +10,7 @@
     --on-accent: #111;
     --danger: #ff5c5c;
     --ok: #7dd956;
+    --warn: #ffb347;
     --radius: 10px;
     color-scheme: dark;
 }
@@ -25,6 +26,7 @@
         --on-accent: #fff;
         --danger: #c62828;
         --ok: #2e7d32;
+        --warn: #b25e00;
         color-scheme: light;
     }
 }
@@ -132,6 +134,26 @@ button.link:hover { color: var(--text); }
 
 .shorten, .result, .filters { display: flex; gap: 8px; margin: 0 0 14px; }
 .shorten.card { padding: 12px; }
+.card.create { padding: 12px; }
+.card.create .shorten { margin: 0; }
+details.more { margin-top: 10px; }
+details.more summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; width: max-content; }
+details.more summary:hover { color: var(--text); }
+details.more[open] summary { margin-bottom: 10px; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: end; }
+.settings label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.settings .btn { height: 46px; }
+input[type="datetime-local"], input[type="number"] {
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    outline: none;
+}
+.card input[type="url"], .card input[type="text"], .card input[type="datetime-local"], .card input[type="number"] { background: var(--bg); }
 .title-in { max-width: 240px; }
 .filters { flex-wrap: wrap; align-items: center; }
 .filters input[type="search"] { flex: 1 1 220px; width: auto; }
@@ -155,6 +177,7 @@ button.link:hover { color: var(--text); }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.72rem; border: 1px solid var(--border); color: var(--muted); }
 .badge.on { color: var(--ok); border-color: var(--ok); }
 .badge.off { color: var(--danger); border-color: var(--danger); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
 
 /* Table */
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }

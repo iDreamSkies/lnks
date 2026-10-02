@@ -96,7 +96,9 @@ final class Instance {
 
         $cmd = [PHP_BINARY, '-d', 'display_errors=stderr', '-S', '127.0.0.1:' . $port, '-t', $this->dir, $this->dir . '/router.php'];
         $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
-        $this->proc = proc_open($cmd, [0 => ['file', $null, 'r'], 1 => ['file', $null, 'w'], 2 => ['file', $this->dir . '/server.log', 'w']], $pipes, $this->dir);
+        // Several workers so tests can fire concurrent requests (ignored on Windows)
+        $env = array_merge(getenv(), ['PHP_CLI_SERVER_WORKERS' => '4']);
+        $this->proc = proc_open($cmd, [0 => ['file', $null, 'r'], 1 => ['file', $null, 'w'], 2 => ['file', $this->dir . '/server.log', 'w']], $pipes, $this->dir, $env);
 
         for ($i = 0; $i < 100; $i++) {
             $c = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.1);
@@ -223,6 +225,24 @@ final class Client {
         eq(302, $r->status, 'admin login');
         return $this;
     }
+}
+
+/** Fire $n GET requests at the same time (separate processes) and return their HTTP status codes. */
+function parallelGet(string $path, int $n): array {
+    $script = 'stream_context_set_default(["http" => ["ignore_errors" => true, "follow_location" => 0, "header" => "User-Agent: Mozilla/5.0"]]);'
+        . '@file_get_contents($argv[1]); preg_match("~\\s(\\d{3})\\s~", $http_response_header[0] ?? "", $m); echo $m[1] ?? 0;';
+    $procs = [];
+    for ($i = 0; $i < $n; $i++) {
+        $procs[] = proc_open([PHP_BINARY, '-r', $script, instance()->base . $path], [1 => ['pipe', 'w']], $pipes);
+        $outs[] = $pipes[1];
+    }
+    $codes = [];
+    foreach ($procs as $i => $p) {
+        $codes[] = (int)stream_get_contents($outs[$i]);
+        fclose($outs[$i]);
+        proc_close($p);
+    }
+    return $codes;
 }
 
 /** API helper: JSON request with the test token. */

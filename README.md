@@ -27,11 +27,13 @@ No Composer, no framework, no Docker, no tracking pixels, no third-party scripts
 - Optional title for every link
 - Public mode (anyone can shorten, per-IP rate limit) or private mode (admin + API only)
 - Links pointing back to the shortener itself are rejected (no redirect loops)
+- **Expiry date and click limit** per link: afterwards the link answers `410 Gone` with a short notice page; the limit is enforced atomically, even under concurrent clicks
 
 **Admin panel**
 - Login + password (you choose both in the installer), brute-force lockout
 - Dashboard: total links, total clicks, clicks today and over 7 days
-- Search by code, title or URL; filter by status; sort by date, clicks or last click
+- Search by code, title or URL; filter by status (active / expired / disabled); sort by date, clicks or last click
+- Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
@@ -136,20 +138,20 @@ API responses are always in English.
 All requests need `Authorization: Bearer YOUR_API_TOKEN`.
 
 ```bash
-# Create (title is optional)
+# Create (title, expires_at and max_clicks are optional)
 curl -X POST https://lnks.example.com/api.php \
   -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/very/long/url", "title": "Docs"}'
+  -d '{"url": "https://example.com/very/long/url", "title": "Docs", "expires_at": "2026-12-31 23:59", "max_clicks": 100}'
 
-# List (q, limit 1-100, offset)
-curl "https://lnks.example.com/api.php?q=docs&limit=20" -H "Authorization: Bearer YOUR_API_TOKEN"
+# List (q, state=active|expired|disabled, limit 1-100, offset)
+curl "https://lnks.example.com/api.php?q=docs&state=active&limit=20" -H "Authorization: Bearer YOUR_API_TOKEN"
 
 # Details + clicks for the last 30 days
 curl "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN"
 
-# Disable (0) / enable (1)
+# Update any of: status (0/1), title, expires_at, max_clicks — null or "" removes a limit
 curl -X PATCH "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN" \
-  -H "Content-Type: application/json" -d '{"status": 0}'
+  -H "Content-Type: application/json" -d '{"status": 1, "expires_at": null, "max_clicks": 500}'
 
 # Delete
 curl -X DELETE "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN"
@@ -160,6 +162,8 @@ Create response (201):
 ```json
 { "ok": true, "id": 1, "code": "aB3xYz", "short_url": "https://lnks.example.com/aB3xYz", "url": "https://example.com/very/long/url", "title": "Docs" }
 ```
+
+`expires_at` is UTC: `YYYY-MM-DD HH:MM[:SS]`, ISO 8601 with an offset (`2026-12-31T23:59:00+03:00`, converted to UTC), or `YYYY-MM-DD` (end of that day). Link objects include `state`: `active`, `disabled`, `expired` (date passed) or `limit` (click limit reached).
 
 Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status (400, 401, 404, 405, 422, 503).
 
@@ -218,7 +222,7 @@ lnks is the intentionally minimal open-source core. A full-featured edition exis
 
 - Custom slugs and link editing
 - Multi-domain support
-- Link expiration, click limits, password-protected links
+- Password-protected links
 - UTM builder and per-click analytics (geo, device, browser, unique visitors)
 - A/B split testing
 - Telegram bot integration

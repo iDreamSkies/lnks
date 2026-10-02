@@ -24,6 +24,8 @@ test('migration: upgrades a database from the main branch', function () {
     eq(0, (int)$l['status']);
     eq('2025-01-03 12:00:00', $l['last_click_at'], 'last_click_at backfilled');
     eq(2, (int)$pdo->query('SELECT COUNT(*) FROM clicks')->fetchColumn(), 'click log kept');
+    eq(null, $l['expires_at'], 'new column expires_at starts empty');
+    eq(null, $l['max_clicks'], 'new column max_clicks starts empty');
     $pdo = null;
     @unlink($file);
 });
