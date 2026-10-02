@@ -4,7 +4,15 @@
  * Usage: php -S localhost:8080 router.php
  * Not needed in production (Apache/Nginx handle routing).
  */
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$path = rawurldecode((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
+
+// Never serve the database, config or internal files (the .htaccess rules do not apply here)
+if (preg_match('~^/(storage/|\.git|config(\.example)?\.php$|schema\.sql$|bootstrap\.php$|layout\.php$|router\.php$|README\.md$)~', $path)
+    || str_contains($path, '..')) {
+    http_response_code(403);
+    exit('Forbidden');
+}
+
 if ($path !== '/' && is_file(__DIR__ . $path)) {
     return false; // serve the real file (admin.php, api.php, public/*)
 }

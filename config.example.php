@@ -21,7 +21,14 @@ return [
     // Set to false to make the service private (admin + API only).
     'public_form' => true,
 
-    // Short code settings
+    // Read the visitor IP from X-Forwarded-For (right-most entry). Enable ONLY behind your own reverse proxy,
+    // otherwise clients can spoof it and bypass the rate limit.
+    'trust_proxy' => false,
+
+    // Public form rate limit: max new links per IP within the window
+    'rate_limit' => ['max' => 20, 'window_min' => 60],
+
+    // Short code settings (length is clamped to 4–12)
     'code' => [
         'alphabet' => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789',
         'length'   => 6,
