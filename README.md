@@ -2,6 +2,7 @@
 ![PHP 8.0+](https://img.shields.io/badge/PHP-8.0%2B-777bb4.svg)
 ![SQLite](https://img.shields.io/badge/SQLite-zero%20config-003b57.svg)
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-success.svg)
+[![Tests](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml/badge.svg)](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml)
 
 **English** · [Русский](README.ru.md)
 
@@ -206,7 +207,7 @@ php tests/run.php          # everything
 php tests/run.php qr       # only tests whose name contains "qr"
 ```
 
-Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. The runner starts a throw-away copy of the app on the PHP built-in server, checks it over HTTP and removes it afterwards; your `config.php` and database are never touched.
+Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. GitHub Actions runs the suite on PHP 8.0, 8.1, 8.2 and 8.3, plus PHP 8.0 without `mbstring` and `ctype`. The runner starts a throw-away copy of the app on the PHP built-in server, checks it over HTTP and removes it afterwards; your `config.php` and database are never touched.
 
 ## Third-party code
 
