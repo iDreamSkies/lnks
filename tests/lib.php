@@ -75,6 +75,7 @@ function writeConfig(string $dir, array $extra = []): void {
         'api_token'       => TEST_API_TOKEN,
         'public_form'     => true,
         'rate_limit'      => ['max' => 1000, 'window_min' => 60],
+        'domains'         => ['go.test', 'alt.test'],
     ], $extra);
     file_put_contents($dir . '/config.php', "<?php\nreturn " . var_export($cfg, true) . ";\n");
 }

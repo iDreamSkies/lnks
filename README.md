@@ -65,6 +65,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
 - **Password-protected links**: visitors enter a password before the redirect; the destination is never shown before that, and guessing is throttled per link and IP
+- **Custom short names** (`/spring-sale`) and **several domains**: list extra hosts in `config.php` and bind a link to one of them, or leave it working on all
 - **UTM tags and templates**: add `utm_source` / `utm_medium` / `utm_campaign` when creating a link, or pick a saved template (Admin → UTM templates); other query parameters and the `#fragment` are kept as they are
 - **CSV import & export** with preview, duplicate detection and an error report; **YOURLS exports import as is** (keywords keep working)
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
@@ -140,6 +141,10 @@ chmod 775 storage
 
 **Local dev:** `php -S localhost:8080 router.php`
 
+### Several domains
+
+Add the extra hosts to `config.php` (`'domains' => ['go.example.com', 'brand.link']`) and point each of them at the **same folder** as the main domain — on shared hosting that is usually "alias domain", "parked domain" or "additional domain" in the panel. When creating a link, pick a domain to bind it to; it then answers only on that host and its short URL, copy button and QR code use it. Links without a domain work on every host. Short names are unique across all domains.
+
 ### Upgrading
 
 Pull the new files and keep your `config.php` and `storage/`. The database is migrated automatically on the first request. Configs from older versions keep working: a missing `admin_user` defaults to `admin`.
@@ -177,7 +182,7 @@ server {
 - **Export** downloads every link: `code,url,title,clicks,status,created_at,last_click_at,expires_at,max_clicks` (UTF-8 with BOM, opens in Excel). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets do not run them as formulas; the importer removes it again.
 - **Import** takes a CSV with a header row. Only `url` is required; the other export columns are optional, in any order. Comma, semicolon (Excel in many locales) and tab delimiters are detected automatically, as is a single header-less column of URLs.
 - You first see a **preview**: how many rows are new, which codes are already taken (skipped, never overwritten), and every row with an error and its line number. Nothing is written until you confirm.
-- Rows without a code get a generated one. Imported codes may be 1–32 characters: letters, digits, `-`, `_`. Reserved words (`admin`, `api`, `public`, …) are rejected.
+- Rows without a code get a generated one; an optional `domain` column binds a row to one of the configured domains. Imported codes may be 1–32 characters: letters, digits, `-`, `_`. Reserved words (`admin`, `api`, `public`, …) are rejected.
 - Limits: 5 MB, 50 000 rows per file.
 
 ### Migrating from YOURLS
@@ -211,6 +216,11 @@ All requests need `Authorization: Bearer YOUR_API_TOKEN`.
 curl -X POST https://lnks.example.com/api.php \
   -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/very/long/url", "title": "Docs", "expires_at": "2026-12-31 23:59", "max_clicks": 100}'
+
+# Custom short name, bound to one of the configured domains
+curl -X POST https://lnks.example.com/api.php \
+  -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/spring", "code": "spring-sale", "domain": "go.example.com"}'
 
 # Create with UTM tags: explicit tags and/or a saved template (by name or id); explicit tags win
 curl -X POST https://lnks.example.com/api.php \
@@ -267,6 +277,7 @@ Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status 
 | `admin_pass_hash` | bcrypt hash of the admin password |
 | `api_token` | Bearer token for `/api.php`; empty = API disabled |
 | `public_form` | `true` — anyone can shorten from the homepage; `false` — admin/API only |
+| `domains` | Extra hosts that serve short links, e.g. `['go.example.com']` — point them at the same folder; links can be bound to one of them |
 | `rate_limit` | `['max' => 20, 'window_min' => 60]` — public form limit per IP |
 | `trust_proxy` | `true` to read the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |
 | `code.length` | Short code length (default 6, clamped to 4–12) |
@@ -312,8 +323,7 @@ Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. GitHub Actions runs the
 
 lnks is the intentionally minimal open-source core. A full-featured edition exists with:
 
-- Custom slugs and link editing
-- Multi-domain support
+- Link editing (change the destination or short name)
 - Per-click analytics (geo, device, browser, unique visitors)
 - A/B split testing
 - Telegram bot integration

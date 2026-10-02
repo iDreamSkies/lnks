@@ -32,7 +32,7 @@ return [
     'support.yoomoney' => 'Donate (RU, YooMoney)',
     'support.yoomoney.hint' => 'Support the project from Russia',
     'support.full'     => 'Full edition',
-    'support.full.hint'     => 'Analytics, custom slugs, teams',
+    'support.full.hint' => 'Analytics, A/B tests, teams',
 
     // shared buttons / words
     'btn.copy'    => 'Copy',
@@ -258,4 +258,13 @@ return [
     'utm.err_value' => 'Each UTM tag can be up to 100 characters.',
     'utm.err_empty' => 'Fill in at least one tag.',
     'utm.err_unknown' => 'Unknown UTM template.',
+
+    // custom aliases and domains
+    'err.alias' => 'The short name may contain 1–32 letters, digits, "-" or "_" and cannot be a reserved word.',
+    'err.alias_taken' => 'The short name "{code}" is already taken.',
+    'err.domain' => 'This domain is not configured for short links.',
+    'form.alias' => 'Short name',
+    'form.alias_ph' => 'random',
+    'form.domain' => 'Domain',
+    'form.domain_any' => 'Any domain',
 ];

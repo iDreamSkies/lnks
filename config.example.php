@@ -27,6 +27,10 @@ return [
     // Set to false to make the service private (admin + API only).
     'public_form' => true,
 
+    // Extra domains that serve short links (point them at this same folder), e.g. ['go.example.com', 'brand.link'].
+    // A link can be bound to one of them when it is created; unbound links work on every domain.
+    'domains' => [],
+
     // Read the visitor IP from X-Forwarded-For (right-most entry). Enable ONLY behind your own reverse proxy,
     // otherwise clients can spoof it and bypass the rate limit.
     'trust_proxy' => false,

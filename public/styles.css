@@ -149,6 +149,10 @@ details.more { margin-top: 10px; }
 details.more summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; width: max-content; }
 details.more summary:hover { color: var(--text); }
 details.more[open] summary { margin-bottom: 10px; }
+.prefixed { display: flex; align-items: stretch; }
+.prefixed .prefix { display: flex; align-items: center; padding: 0 10px; border: 1px solid var(--border); border-right: 0; border-radius: 8px 0 0 8px; background: var(--surface-2); color: var(--muted); font-size: 0.85rem; white-space: nowrap; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 761px) { .settings label.wide { grid-column: span 2; } }
+.prefixed input { border-radius: 0 8px 8px 0; min-width: 0; }
 fieldset.utm { border: 1px dashed var(--border); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px 12px; min-width: 0; }
 fieldset.utm legend { color: var(--muted); font-size: 0.85rem; padding: 0 6px; }
 .settings select { width: 100%; padding: 11px 14px; background: var(--bg); }

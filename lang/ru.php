@@ -32,7 +32,7 @@ return [
     'support.yoomoney' => 'Поддержать (ЮMoney)',
     'support.yoomoney.hint' => 'Поддержать проект из России',
     'support.full'     => 'Полная версия',
-    'support.full.hint'     => 'Аналитика, свои алиасы, команды',
+    'support.full.hint' => 'Аналитика, A/B-тесты, команды',
 
     // shared buttons / words
     'btn.copy'    => 'Копировать',
@@ -258,4 +258,13 @@ return [
     'utm.err_value' => 'Каждая UTM-метка — до 100 символов.',
     'utm.err_empty' => 'Заполните хотя бы одну метку.',
     'utm.err_unknown' => 'Неизвестный UTM-шаблон.',
+
+    // custom aliases and domains
+    'err.alias' => 'Короткое имя: 1–32 символа — буквы, цифры, «-» или «_»; служебные слова нельзя.',
+    'err.alias_taken' => 'Короткое имя «{code}» уже занято.',
+    'err.domain' => 'Этот домен не настроен для коротких ссылок.',
+    'form.alias' => 'Короткое имя',
+    'form.alias_ph' => 'случайное',
+    'form.domain' => 'Домен',
+    'form.domain_any' => 'Любой домен',
 ];
