@@ -6,7 +6,7 @@
 
 require_once __DIR__ . '/layout.php';
 
-const LNKS_SCHEMA_VERSION = 3;
+const LNKS_SCHEMA_VERSION = 4;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -101,7 +101,7 @@ function migrate(PDO $pdo): void {
         $pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));   // all statements are IF NOT EXISTS
         $cols = array_column($pdo->query('PRAGMA table_info(links)')->fetchAll(), 'name');
         // Columns added after v1. ADD COLUMN keeps existing rows; new columns start as NULL.
-        $added = ['title' => 'TEXT', 'last_click_at' => 'TEXT', 'expires_at' => 'TEXT', 'max_clicks' => 'INTEGER'];
+        $added = ['title' => 'TEXT', 'last_click_at' => 'TEXT', 'expires_at' => 'TEXT', 'max_clicks' => 'INTEGER', 'password_hash' => 'TEXT'];
         foreach ($added as $col => $type) {
             if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE links ADD COLUMN $col $type");
         }
@@ -266,6 +266,27 @@ function parseMaxClicks($v): array {
     return [null, t('err.max_clicks')];
 }
 
+/** Validate a link password: empty = none. Returns [hash|null, error|null]. */
+function parseLinkPassword($v): array {
+    if ($v === null || $v === '') return [null, null];
+    $v = (string)$v;
+    $len = strlen($v);
+    if ($len < 4 || $len > 128) return [null, t('err.password')];
+    return [password_hash($v, PASSWORD_DEFAULT), null];
+}
+
+/** Throttle password guessing on protected links: $max failures per link and IP per window. */
+function unlockBlocked(PDO $pdo, int $linkId, string $ip, int $max = 5, int $windowMin = 15): bool {
+    $pdo->prepare('DELETE FROM unlock_attempts WHERE ts < :t')->execute([':t' => gmdate('Y-m-d H:i:s', time() - 86400)]);
+    return (int)scalar($pdo, 'SELECT COUNT(*) FROM unlock_attempts WHERE link_id = :l AND ip = :ip AND ts > :t',
+        [':l' => $linkId, ':ip' => $ip, ':t' => gmdate('Y-m-d H:i:s', time() - $windowMin * 60)]) >= $max;
+}
+
+function unlockFailed(PDO $pdo, int $linkId, string $ip): void {
+    $pdo->prepare('INSERT INTO unlock_attempts (link_id, ip, ts) VALUES (:l, :ip, :t)')
+        ->execute([':l' => $linkId, ':ip' => $ip, ':t' => now()]);
+}
+
 /** 'active' | 'disabled' | 'expired' (date passed) | 'limit' (click limit reached) */
 function linkState(array $l): string {
     if ((int)$l['status'] !== 1) return 'disabled';
@@ -288,7 +309,7 @@ function stateSql(string $state): string {
 /* ── Create / update link ─────────────────────────────────────────── */
 
 /**
- * @param array $opt title?, expires_at?, max_clicks?
+ * @param array $opt title?, expires_at?, max_clicks?, password?
  */
 function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []): array {
     $url = trim($url);
@@ -307,17 +328,20 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []):
     if ($err) return ['ok' => false, 'error' => $err];
     [$maxClicks, $err] = parseMaxClicks($opt['max_clicks'] ?? null);
     if ($err) return ['ok' => false, 'error' => $err];
+    [$pwHash, $err] = parseLinkPassword($opt['password'] ?? null);
+    if ($err) return ['ok' => false, 'error' => $err];
 
     // The UNIQUE constraint is the source of truth; retry on a (very rare) race.
     for ($try = 0; $try < 3; $try++) {
         $code = generateCode($pdo);
         try {
-            $pdo->prepare('INSERT INTO links (code, url, title, expires_at, max_clicks, created_ip, created_at)
-                           VALUES (:c, :u, :t, :e, :m, :i, :a)')
-                ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':e' => $expires, ':m' => $maxClicks, ':i' => $ip, ':a' => now()]);
+            $pdo->prepare('INSERT INTO links (code, url, title, expires_at, max_clicks, password_hash, created_ip, created_at)
+                           VALUES (:c, :u, :t, :e, :m, :p, :i, :a)')
+                ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':e' => $expires, ':m' => $maxClicks,
+                           ':p' => $pwHash, ':i' => $ip, ':a' => now()]);
             return ['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'code' => $code,
                     'short_url' => baseUrl() . '/' . $code, 'url' => $url, 'title' => $title,
-                    'expires_at' => $expires, 'max_clicks' => $maxClicks];
+                    'expires_at' => $expires, 'max_clicks' => $maxClicks, 'protected' => $pwHash !== null];
         } catch (PDOException $ex) {
             if ($ex->getCode() !== '23000') throw $ex;
         }
@@ -333,7 +357,8 @@ function cleanTitle($title): ?string {
 
 /**
  * Update editable fields of a link. Only keys present in $f are changed:
- * title, expires_at, max_clicks (null/'' clears), status (0|1).
+ * title, expires_at, max_clicks (null/'' clears), status (0|1),
+ * password (non-empty string sets a new one; null or '' removes it).
  */
 function updateLink(PDO $pdo, int $id, array $f): array {
     $set = [];
@@ -353,6 +378,12 @@ function updateLink(PDO $pdo, int $id, array $f): array {
         if ($err) return ['ok' => false, 'error' => $err];
         $set[] = 'max_clicks = :max';
         $params[':max'] = $v;
+    }
+    if (array_key_exists('password', $f)) {
+        [$v, $err] = parseLinkPassword($f['password']);
+        if ($err) return ['ok' => false, 'error' => $err];
+        $set[] = 'password_hash = :pw';
+        $params[':pw'] = $v;
     }
     if (array_key_exists('status', $f)) {
         if (!in_array($f['status'], [0, 1, '0', '1', false, true], true)) return ['ok' => false, 'error' => 'status must be 0 or 1'];

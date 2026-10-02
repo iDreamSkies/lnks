@@ -61,21 +61,25 @@ function langSwitcher(): string {
     return $out . '</span>';
 }
 
-function sendSecurityHeaders(): void {
+/**
+ * @param string $formAction CSP form-action sources. Browsers apply form-action to the redirect that follows
+ *                           a form submission too, so a form that redirects off-site needs more than 'self'.
+ */
+function sendSecurityHeaders(string $formAction = "'self'"): void {
     if (headers_sent()) return;
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
-    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; base-uri 'self'; form-action $formAction; frame-ancestors 'none'");
 }
 
 /**
  * Render a full page.
  * $o: nav ('public'|'admin'|'none'), narrow (bool), description, canonical, index (bool), csrf (string, admin logout form),
- *     scripts (extra script URLs loaded before app.js, e.g. QR_SCRIPT)
+ *     scripts (extra script URLs loaded before app.js, e.g. QR_SCRIPT), form_action (CSP override, see sendSecurityHeaders)
  */
 function renderLayout(string $title, string $body, array $o = []): void {
-    sendSecurityHeaders();
+    sendSecurityHeaders($o['form_action'] ?? "'self'");
 
     $app   = $o['app'] ?? (function_exists('cfg') ? cfg()['app_name'] : 'lnks');
     $nav   = $o['nav'] ?? 'public';
@@ -165,6 +169,7 @@ function icon(string $name): string {
         'qr'     => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17 21h4v-4"/>',
         'pause'  => '<path d="M9 5v14M15 5v14"/>',
         'play'   => '<path d="M7 4.5v15l12-7.5z"/>',
+        'lock'   => '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
         'trash'  => '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     ];
     return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'

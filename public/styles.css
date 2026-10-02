@@ -187,6 +187,11 @@ input[type="datetime-local"], input[type="number"] {
 .badge.on { color: var(--ok); border-color: var(--ok); }
 .badge.off { color: var(--danger); border-color: var(--danger); }
 .badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.lock { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; }
+.badge.lock svg { width: 11px; height: 11px; }
+.lock-icon { display: inline-flex; padding: 14px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--accent); margin-bottom: 12px; }
+.lock-icon svg { width: 28px; height: 28px; }
+.settings .checkbox { flex-direction: row; align-self: center; }
 
 /* Table */
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }

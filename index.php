@@ -11,14 +11,14 @@ if ($uri === 'index.php') $uri = '';
 /* ── Redirect by short code ──────────────────────────────────────── */
 if ($uri !== '' && isValidCode($uri)) {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-    if ($method !== 'GET' && $method !== 'HEAD') {
-        header('Allow: GET, HEAD');
+    if (!in_array($method, ['GET', 'HEAD', 'POST'], true)) {
+        header('Allow: GET, HEAD, POST');
         http_response_code(405);
         exit;
     }
 
     $pdo = db();
-    $link = row($pdo, 'SELECT id, url, status, clicks_total, expires_at, max_clicks FROM links WHERE code = :c LIMIT 1', [':c' => $uri]);
+    $link = row($pdo, 'SELECT id, url, status, clicks_total, expires_at, max_clicks, password_hash FROM links WHERE code = :c LIMIT 1', [':c' => $uri]);
 
     header('X-Robots-Tag: noindex');
 
@@ -27,22 +27,45 @@ if ($uri !== '' && isValidCode($uri)) {
         renderLayout(t('nf.title'), notFoundBody(t('nf.link')), ['nav' => 'public']);
         exit;
     }
-
-    // Expired or out of clicks → 410 Gone. The click limit is enforced atomically in recordClick().
-    $state = linkState($link);
-    if ($state === 'active' && !isBotRequest() && !recordClick($pdo, (int)$link['id'])) {
-        $state = 'limit';
-    }
-    if ($state !== 'active') {
-        http_response_code(410);
-        header('Cache-Control: no-store');
-        $msg = $state === 'expired' ? t('gone.expired', ['date' => substr($link['expires_at'], 0, 16)]) : t('gone.limit');
-        renderLayout(t('gone.title'), notFoundBody($msg, t('gone.title')), ['nav' => 'public']);
+    $protected = !empty($link['password_hash']);
+    if ($method === 'POST' && !$protected) {   // POST only submits the password form
+        header('Allow: GET, HEAD');
+        http_response_code(405);
         exit;
     }
 
+    $state = linkState($link);
+    if ($state !== 'active') goneResponse($state, $link);
+
+    // Password-protected: show the form; never reveal the destination before a correct password
+    if ($protected) {
+        $error = null;
+        if ($method === 'POST') {
+            $ip = clientIp();
+            if (unlockBlocked($pdo, (int)$link['id'], $ip)) {
+                http_response_code(429);
+                $error = t('pw.blocked');
+            } elseif (password_verify((string)($_POST['password'] ?? ''), $link['password_hash'])) {
+                $error = false;   // unlocked
+            } else {
+                unlockFailed($pdo, (int)$link['id'], $ip);
+                usleep(300000);
+                $error = t('pw.wrong');
+            }
+        }
+        if ($error !== false) {
+            header('Cache-Control: no-store');
+            // The form's 303 goes to the (external) destination, so form-action must allow it
+            renderLayout(t('pw.title'), passwordFormBody($uri, $error), ['nav' => 'public', 'narrow' => true, 'form_action' => "'self' https: http:"]);
+            exit;
+        }
+    }
+
+    // The click limit is enforced atomically in recordClick(); bots and HEAD requests are not counted.
+    if (!isBotRequest() && !recordClick($pdo, (int)$link['id'])) goneResponse('limit', $link);
+
     header('Cache-Control: private, no-cache');
-    header('Location: ' . $link['url'], true, 302);
+    header('Location: ' . $link['url'], true, $method === 'POST' ? 303 : 302);
     exit;
 }
 
@@ -121,6 +144,29 @@ renderLayout(t('home.title'), '
     'description' => t('home.meta_desc'),
     'scripts'     => $result ? [QR_SCRIPT] : [],
 ]);
+
+/** 410 Gone for expired links or links that used up their clicks. */
+function goneResponse(string $state, array $link): void {
+    http_response_code(410);
+    header('Cache-Control: no-store');
+    $msg = $state === 'expired' ? t('gone.expired', ['date' => substr((string)$link['expires_at'], 0, 16)]) : t('gone.limit');
+    renderLayout(t('gone.title'), notFoundBody($msg, t('gone.title')), ['nav' => 'public']);
+    exit;
+}
+
+function passwordFormBody(string $code, ?string $error): string {
+    return '<section class="hero">
+        <div class="lock-icon" aria-hidden="true">' . icon('lock') . '</div>
+        <h1>' . te('pw.title') . '</h1>
+        <p class="tagline">' . te('pw.text') . '</p>
+        ' . ($error ? '<p class="alert error" role="alert">' . e($error) . '</p>' : '') . '
+        <form method="post" action="/' . e($code) . '" class="login">
+            <label class="sr-only" for="link-password">' . te('pw.label') . '</label>
+            <input type="password" id="link-password" name="password" placeholder="' . te('pw.label') . '" required autofocus autocomplete="off" maxlength="128">
+            <button type="submit" class="btn">' . te('pw.submit') . '</button>
+        </form>
+    </section>';
+}
 
 function notFoundBody(string $msg, string $heading = '404'): string {
     return '<section class="hero"><h1>' . e($heading) . '</h1><p class="tagline">' . e($msg) . '</p><p><a class="btn" href="/">' . te('nf.back') . '</a></p></section>';

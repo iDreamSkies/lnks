@@ -26,6 +26,7 @@ test('migration: upgrades a database from the main branch', function () {
     eq(2, (int)$pdo->query('SELECT COUNT(*) FROM clicks')->fetchColumn(), 'click log kept');
     eq(null, $l['expires_at'], 'new column expires_at starts empty');
     eq(null, $l['max_clicks'], 'new column max_clicks starts empty');
+    eq(null, $l['password_hash'], 'new column password_hash starts empty');
     $pdo = null;
     @unlink($file);
 });

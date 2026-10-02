@@ -64,6 +64,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
+- **Password-protected links**: visitors enter a password before the redirect; the destination is never shown before that, and guessing is throttled per link and IP
 - **CSV import & export** with preview, duplicate detection and an error report; **YOURLS exports import as is** (keywords keep working)
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
 
@@ -216,7 +217,7 @@ curl "https://lnks.example.com/api.php?q=docs&state=active&limit=20" -H "Authori
 # Details + clicks for the last 30 days
 curl "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN"
 
-# Update any of: status (0/1), title, expires_at, max_clicks — null or "" removes a limit
+# Update any of: status (0/1), title, expires_at, max_clicks, password — null or "" removes a limit / the password
 curl -X PATCH "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer YOUR_API_TOKEN" \
   -H "Content-Type: application/json" -d '{"status": 1, "expires_at": null, "max_clicks": 500}'
 
@@ -230,7 +231,7 @@ Create response (201):
 { "ok": true, "id": 1, "code": "aB3xYz", "short_url": "https://lnks.example.com/aB3xYz", "url": "https://example.com/very/long/url", "title": "Docs" }
 ```
 
-`expires_at` is UTC: `YYYY-MM-DD HH:MM[:SS]`, ISO 8601 with an offset (`2026-12-31T23:59:00+03:00`, converted to UTC), or `YYYY-MM-DD` (end of that day). Link objects include `state`: `active`, `disabled`, `expired` (date passed) or `limit` (click limit reached).
+`expires_at` is UTC: `YYYY-MM-DD HH:MM[:SS]`, ISO 8601 with an offset (`2026-12-31T23:59:00+03:00`, converted to UTC), or `YYYY-MM-DD` (end of that day). Link objects include `state`: `active`, `disabled`, `expired` (date passed) or `limit` (click limit reached), and `protected` (true when a password is set). `password` (4–128 characters) can be sent on create and update; it is stored as a hash and never returned or exported.
 
 CSV over the API:
 
@@ -269,6 +270,7 @@ Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status 
 - Login requires username **and** password; 5 failed attempts per 15 minutes lock the IP out; session ID regenerated on login; `HttpOnly` + `SameSite` cookies
 - Strict Content-Security-Policy (no inline scripts or styles), `X-Frame-Options: DENY`, `nosniff`
 - `storage/`, `lang/`, config and internal files are blocked at the web-server level
+- Link passwords are stored with `password_hash()`; 5 wrong attempts per link and IP within 15 minutes answer `429`; the password page is `no-store` and does not reveal the destination; hashes never leave the database (API, CSV)
 - Redirects send `X-Robots-Tag: noindex`
 - No cookies for visitors who only follow short links
 
@@ -303,7 +305,6 @@ lnks is the intentionally minimal open-source core. A full-featured edition exis
 
 - Custom slugs and link editing
 - Multi-domain support
-- Password-protected links
 - UTM builder and per-click analytics (geo, device, browser, unique visitors)
 - A/B split testing
 - Telegram bot integration

@@ -2,11 +2,11 @@
 /**
  * lnks — REST API (Bearer token)
  *
- *   POST   /api.php                 create   { "url", "title"?, "expires_at"?, "max_clicks"? }      → 201
+ *   POST   /api.php                 create   { "url", "title"?, "expires_at"?, "max_clicks"?, "password"? } → 201
  *   GET    /api.php                 list     ?q=&state=active|expired|disabled&limit=20&offset=0   → 200
  *   GET    /api.php?code=aB3xYz     details  + clicks for the last 30 days                          → 200
- *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks" } → 200
- *                                            (null or "" removes the expiry / click limit)
+ *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks", "password" } → 200
+ *                                            (null or "" removes the expiry / click limit / password)
  *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
  *   GET    /api.php?export=csv      all links as CSV (same file as the admin export)                → 200
  *   POST   /api.php?import=csv      import CSV (raw text/csv body or multipart field "file");
@@ -59,6 +59,7 @@ function linkOut(array $l): array {
         'state'         => linkState($l),   // active | disabled | expired | limit
         'expires_at'    => $l['expires_at'],
         'max_clicks'    => $l['max_clicks'] === null ? null : (int)$l['max_clicks'],
+        'protected'     => !empty($l['password_hash']),   // the hash itself is never returned
         'created_at'    => $l['created_at'],
     ];
 }
@@ -111,6 +112,7 @@ switch ($method) {
             'title'      => isset($d['title']) ? (string)$d['title'] : null,
             'expires_at' => $d['expires_at'] ?? null,
             'max_clicks' => $d['max_clicks'] ?? null,
+            'password'   => isset($d['password']) ? (string)$d['password'] : null,
         ]);
         if ($r['ok']) $r['state'] = 'active';
         respondJson($r, $r['ok'] ? 201 : 422);
@@ -148,9 +150,9 @@ switch ($method) {
 
     case 'PATCH':
         $l = findByCode($pdo, $code);
-        $d = array_intersect_key(requestData(), array_flip(['status', 'title', 'expires_at', 'max_clicks']));
+        $d = array_intersect_key(requestData(), array_flip(['status', 'title', 'expires_at', 'max_clicks', 'password']));
         if (!$d) {
-            respondJson(['ok' => false, 'error' => 'Provide at least one of: status, title, expires_at, max_clicks'], 422);
+            respondJson(['ok' => false, 'error' => 'Provide at least one of: status, title, expires_at, max_clicks, password'], 422);
         }
         $r = updateLink($pdo, (int)$l['id'], $d);
         if (!$r['ok']) respondJson($r, 422);
