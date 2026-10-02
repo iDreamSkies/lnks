@@ -170,7 +170,7 @@ return [
     'form.save' => 'Save',
     'flash.saved' => 'Saved.',
     'stats.settings' => 'Settings',
-    'stats.settings_hint' => 'Leave a field empty to remove the limit.',
+    'stats.settings_hint' => 'Empty expiry or limit = no restriction. An empty password field keeps the current password.',
     'left.d' => '{n} d left',
     'left.h' => '{n} h left',
     'left.m' => '{n} min left',
@@ -223,4 +223,18 @@ return [
     'home.s3_d' => 'Send it in a messenger, post it, or download a QR code for flyers and business cards.',
     'footer.admin' => 'Admin login',
     'btn.stats' => 'Statistics',
+
+    // password-protected links
+    'err.password' => 'The password must be 4–128 characters.',
+    'pw.title' => 'Protected link',
+    'pw.text' => 'This link is protected. Enter the password to continue.',
+    'pw.label' => 'Password',
+    'pw.submit' => 'Open link',
+    'pw.wrong' => 'Wrong password.',
+    'pw.blocked' => 'Too many attempts. Try again in 15 minutes.',
+    'status.protected' => 'Password',
+    'form.password' => 'Password',
+    'form.password_ph' => 'No password',
+    'form.password_keep' => 'Unchanged',
+    'form.password_remove' => 'Remove password',
 ];

@@ -72,6 +72,11 @@ function stateBadge(string $state, bool $showActive = false): string {
     return '<span class="badge ' . $map[$state][0] . '">' . te($map[$state][1]) . '</span>';
 }
 
+/** Lock badge for password-protected links. */
+function lockBadge(array $l): string {
+    return empty($l['password_hash']) ? '' : '<span class="badge lock" title="' . te('status.protected') . '">' . icon('lock') . te('status.protected') . '</span>';
+}
+
 /** "3 d left" / "5 h left" / "12 min left" for a future UTC timestamp. */
 function timeLeft(string $utc): string {
     $s = strtotime($utc . ' UTC') - time();
@@ -151,15 +156,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
                 'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
+                'password'   => (string)($_POST['password'] ?? ''),
             ]);
             $r['ok'] ? flash('ok', t('flash.created', ['url' => $r['short_url']])) : flash('error', $r['error']);
             break;
         case 'update':
-            $r = updateLink($pdo, $id, [
+            $fields = [
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
                 'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
-            ]);
+            ];
+            // Password: empty field keeps the current one; the checkbox removes it
+            if (!empty($_POST['password_remove'])) $fields['password'] = null;
+            elseif ((string)($_POST['password'] ?? '') !== '') $fields['password'] = (string)$_POST['password'];
+            $r = updateLink($pdo, $id, $fields);
             $r['ok'] ? flash('ok', t('flash.saved')) : flash('error', $r['error']);
             break;
         case 'import_run':
@@ -295,7 +305,7 @@ if (isset($_GET['id'])) {
             <div class="row-actions">
                 <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
                 ' . qrButton($short, $l['code']) . '
-                ' . stateBadge(linkState($l), true) . '
+                ' . stateBadge(linkState($l), true) . lockBadge($l) . '
             </div>
         </div>
         <div class="tiles">
@@ -323,6 +333,8 @@ if (isset($_GET['id'])) {
                 <label>' . te('form.title') . '<input type="text" name="title" value="' . e((string)$l['title']) . '" maxlength="120"></label>
                 <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at" value="' . e(dtLocal($l['expires_at'])) . '"></label>
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" value="' . e((string)$l['max_clicks']) . '" placeholder="' . te('form.max_clicks_ph') . '"></label>
+                <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . (empty($l['password_hash']) ? te('form.password_ph') : te('form.password_keep')) . '"></label>
+                ' . (empty($l['password_hash']) ? '' : '<label class="checkbox"><input type="checkbox" name="password_remove" value="1"> ' . te('form.password_remove') . '</label>') . '
                 <button type="submit" class="btn">' . te('form.save') . '</button>
             </form>
             <p class="muted small">' . te('stats.settings_hint') . '</p>
@@ -394,7 +406,7 @@ foreach ($links as $l) {
     $rows .= '<tr' . ($state === 'active' ? '' : ' class="disabled"') . '>
         <td data-label="' . te('th.link') . '" class="cell-link">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
-            ' . stateBadge($state) . '
+            ' . stateBadge($state) . lockBadge($l) . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
             ' . limitsLine($l) . '
         </td>
@@ -465,6 +477,7 @@ renderLayout(t('list.title'), '
             <div class="settings">
                 <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at"></label>
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" placeholder="' . te('form.max_clicks_ph') . '"></label>
+                <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . te('form.password_ph') . '"></label>
             </div>
         </details>
     </form>
