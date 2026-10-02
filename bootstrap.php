@@ -197,18 +197,32 @@ function loginFailed(PDO $pdo, string $ip): void {
 }
 
 /* ── Short code ──────────────────────────────────────────────────── */
+
+/** Words that can never be short codes: they collide with files, folders or entry points. */
+const RESERVED_CODES = ['admin', 'api', 'install', 'index', 'router', 'bootstrap', 'layout', 'i18n', 'csv', 'config',
+    'schema', 'public', 'storage', 'lang', 'tests', 'docs', 'scripts', 'vendor', 'readme', 'license', 'changelog'];
+
+/**
+ * Valid short code: generated codes are 4–12 alphanumerics; imported ones (e.g. from YOURLS)
+ * may be 1–32 chars of letters, digits, "-" and "_", starting with a letter or digit.
+ */
+function isValidCode(string $code): bool {
+    return (bool)preg_match('~^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$~', $code)
+        && !in_array(strtolower($code), RESERVED_CODES, true);
+}
+
 function generateCode(PDO $pdo): string {
     $c        = cfg()['code'];
     $alphabet = $c['alphabet'];
     $max      = strlen($alphabet) - 1;
-    $base     = max(4, min(12, (int)$c['length']));   // index.php routes codes of 4–12 chars
+    $base     = max(4, min(12, (int)$c['length']));
 
     // Grow the code by one char after 10 collisions in a row (only matters when the space fills up).
     for ($len = $base; $len <= 12; $len++) {
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $code = '';
             for ($i = 0; $i < $len; $i++) $code .= $alphabet[random_int(0, $max)];
-            if (!scalar($pdo, 'SELECT 1 FROM links WHERE code = :c LIMIT 1', [':c' => $code])) return $code;
+            if (isValidCode($code) && !scalar($pdo, 'SELECT 1 FROM links WHERE code = :c LIMIT 1', [':c' => $code])) return $code;
         }
     }
     throw new RuntimeException('Short code space exhausted');

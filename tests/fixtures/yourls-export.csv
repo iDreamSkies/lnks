@@ -1,0 +1,11 @@
+keyword,url,title,timestamp,ip,clicks
+1,https://example.com/first,"First, with comma",2014-01-01 10:00:00,1.2.3.4,15
+a,https://example.com/a,Plain A,2015-02-02 11:00:00,::1,0
+my-link,https://example.com/dash,"Quote ""inside""",2016-03-03 12:00:00,5.6.7.8,7
+x_y,https://example.com/under,,2017-04-04 13:00:00,,3
+admin,https://example.com/reserved,Reserved,2018-01-01 00:00:00,,0
+bad code!,https://example.com/badcode,Bad,2018-01-01 00:00:00,,0
+1,https://example.com/dup-in-file,Dup,2019-01-01 00:00:00,,0
+nourl,not-a-url,Broken,2019-01-01 00:00:00,,0
+multi,https://example.com/multi,"Line one
+Line two",2020-01-01 00:00:00,,2

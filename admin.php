@@ -4,6 +4,7 @@
  * Login, dashboard, link list (search / filter / sort), per-link stats, enable/disable, delete.
  */
 require __DIR__ . '/bootstrap.php';
+require __DIR__ . '/csv.php';
 header('X-Robots-Tag: noindex,nofollow');
 header('Cache-Control: no-store');
 
@@ -103,8 +104,32 @@ function adminUrl(array $params): string {
     return '/admin.php' . ($params ? '?' . http_build_query($params) : '');
 }
 
+/** Parse the uploaded CSV and keep the valid rows until the admin confirms. */
+function importPreview(PDO $pdo): array {
+    $f = $_FILES['file'] ?? null;
+    if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || $f['size'] > CSV_MAX_BYTES || !is_uploaded_file($f['tmp_name'])) {
+        return ['fatal' => t('csv.err_upload')];
+    }
+    $parsed = parseCsv((string)file_get_contents($f['tmp_name']));
+    $plan   = planImport($pdo, $parsed['rows']);
+    $_SESSION['import_id'] = $plan['new'] ? savePendingImport($parsed['rows']) : null;
+    return ['parsed' => $parsed, 'plan' => $plan, 'id' => $_SESSION['import_id']];
+}
+
+/* ── CSV export ──────────────────────────────────────────────────── */
+if (($_GET['export'] ?? '') === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . exportFilename() . '"');
+    exportCsv($pdo, fopen('php://output', 'w'));
+    exit;
+}
+
 /* ── Actions ─────────────────────────────────────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+$preview = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_preview') {
+    csrfCheck();
+    $preview = importPreview($pdo);   // rendered on the import page below, no redirect
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     csrfCheck();
     $id = (int)($_POST['id'] ?? 0);
     switch ($_POST['action']) {
@@ -137,6 +162,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ]);
             $r['ok'] ? flash('ok', t('flash.saved')) : flash('error', $r['error']);
             break;
+        case 'import_run':
+            $importId = (string)($_POST['import_id'] ?? '');
+            $rows = hash_equals((string)($_SESSION['import_id'] ?? ''), $importId) ? takePendingImport($importId) : null;
+            unset($_SESSION['import_id']);
+            if ($rows === null) {
+                flash('error', t('csv.expired'));
+                header('Location: /admin.php?view=io');
+                exit;
+            }
+            $r = runImport($pdo, $rows);
+            flash('ok', t('csv.done', ['n' => $r['imported'], 'dup' => $r['duplicates']]));
+            header('Location: /admin.php');
+            exit;
     }
     redirectBack();
 }
@@ -147,6 +185,78 @@ $flashHtml = $flash
     ? '<p class="alert ' . ($flash['type'] === 'ok' ? 'ok' : 'error') . '" role="status">' . e($flash['msg']) . '</p>'
     : '';
 $opts = ['nav' => 'admin', 'csrf' => csrfToken(), 'scripts' => [QR_SCRIPT]];
+
+/* ── Import / export page ─────────────────────────────────────────── */
+if (($_GET['view'] ?? '') === 'io' || $preview !== null) {
+    $previewHtml = '';
+    if ($preview !== null && isset($preview['fatal'])) {
+        $previewHtml = '<p class="alert error" role="alert">' . e($preview['fatal']) . '</p>';
+    } elseif ($preview !== null) {
+        $p = $preview['parsed'];
+        $plan = $preview['plan'];
+        $cell = fn($s) => '<td class="ellipsis">' . e((string)$s) . '</td>';
+
+        $errRows = '';
+        foreach (array_slice($p['errors'], 0, 100) as $er) {
+            $errRows .= '<tr><td class="num">' . (int)$er['line'] . '</td>' . $cell($er['url'] ?? '') . '<td>' . e($er['error']) . '</td></tr>';
+        }
+        $dupRows = '';
+        foreach (array_slice($plan['duplicates'], 0, 100) as $d) {
+            $dupRows .= '<tr><td class="num">' . (int)$d['line'] . '</td><td class="code">' . e($d['code']) . '</td>' . $cell($d['url'])
+                . '<td>' . te($d['reason'] === 'exists' ? 'csv.reason_exists' : 'csv.reason_file') . '</td></tr>';
+        }
+        $newRows = '';
+        foreach (array_slice($plan['new'], 0, 20) as $n) {
+            $newRows .= '<tr><td class="num">' . (int)$n['line'] . '</td><td class="code">' . ($n['code'] !== '' ? e($n['code']) : '<span class="muted">' . te('csv.generated') . '</span>') . '</td>'
+                . $cell($n['url']) . $cell((string)$n['title']) . '<td class="num">' . (int)$n['clicks'] . '</td></tr>';
+        }
+        $table = fn(string $h, string $head, string $rows) => $rows === '' ? '' :
+            '<section class="card"><h2>' . $h . '</h2><div class="table-wrap"><table class="plain-table wide"><thead><tr>' . $head . '</tr></thead><tbody>' . $rows . '</tbody></table></div></section>';
+        $th = fn(string ...$keys) => implode('', array_map(fn($k) => '<th>' . te($k) . '</th>', $keys));
+
+        $previewHtml = '<section class="card preview">
+                <h2>' . te('csv.preview_h') . '</h2>
+                <p>' . te('csv.summary', ['total' => $p['total'], 'new' => count($plan['new']), 'dup' => count($plan['duplicates']), 'err' => count($p['errors'])]) . '</p>
+                ' . ($p['format'] === 'yourls' ? '<p class="alert ok">' . te('csv.format_yourls') . '</p>' : '') . '
+                ' . ($preview['id']
+                    ? '<form method="post" class="row-actions">' . csrfField() . '
+                        <input type="hidden" name="action" value="import_run">
+                        <input type="hidden" name="import_id" value="' . e($preview['id']) . '">
+                        <button type="submit" class="btn">' . te('csv.run_btn', ['n' => count($plan['new'])]) . '</button>
+                        <a class="btn ghost" href="/admin.php?view=io">' . te('csv.cancel') . '</a>
+                      </form>'
+                    : '<p class="muted">' . te('csv.nothing') . '</p>') . '
+            </section>'
+            . $table(te('csv.err_h'), $th('csv.th_line', 'csv.th_url', 'csv.th_reason'), $errRows)
+            . $table(te('csv.dup_h'), $th('csv.th_line', 'csv.th_code', 'csv.th_url', 'csv.th_reason'), $dupRows)
+            . $table(te('csv.new_h', ['n' => min(20, count($plan['new']))]), $th('csv.th_line', 'csv.th_code', 'csv.th_url', 'form.title', 'th.clicks'), $newRows);
+    }
+
+    renderLayout(t('csv.title'), '
+        <div class="topbar"><h1>' . te('csv.title') . '</h1></div>
+        ' . $flashHtml . '
+        <div class="io-grid">
+            <section class="card">
+                <h2>' . te('csv.export_h') . '</h2>
+                <p class="muted">' . te('csv.export_text') . '</p>
+                <a class="btn" href="/admin.php?export=csv">' . te('csv.export_btn') . '</a>
+            </section>
+            <section class="card">
+                <h2>' . te('csv.import_h') . '</h2>
+                <p class="muted small">' . te('csv.import_text') . '</p>
+                <form method="post" enctype="multipart/form-data" class="upload">
+                    ' . csrfField() . '
+                    <input type="hidden" name="action" value="import_preview">
+                    <label class="sr-only" for="csvfile">' . te('csv.file') . '</label>
+                    <input type="file" id="csvfile" name="file" accept=".csv,.txt,text/csv,text/plain" required>
+                    <button type="submit" class="btn">' . te('csv.preview_btn') . '</button>
+                </form>
+            </section>
+        </div>
+        ' . $previewHtml . '
+    ', $opts);
+    exit;
+}
 
 /* ── Per-link stats page ─────────────────────────────────────────── */
 if (isset($_GET['id'])) {
@@ -201,7 +311,7 @@ if (isset($_GET['id'])) {
         </section>
         <section class="card">
             <h2>' . te('stats.refs') . '</h2>
-            <table class="plain-table"><tbody>' . $refRows . '</tbody></table>
+            <table class="plain-table refs"><tbody>' . $refRows . '</tbody></table>
         </section>
         <section class="card">
             <h2>' . te('stats.settings') . '</h2>

@@ -8,12 +8,16 @@
  *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks" } → 200
  *                                            (null or "" removes the expiry / click limit)
  *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
+ *   GET    /api.php?export=csv      all links as CSV (same file as the admin export)                → 200
+ *   POST   /api.php?import=csv      import CSV (raw text/csv body or multipart field "file");
+ *                                   add &dry_run=1 to only validate                                 → 200
  *
  * expires_at: UTC "YYYY-MM-DD HH:MM[:SS]", ISO 8601 with offset, or "YYYY-MM-DD" (= end of that day)
  *
  * Header: Authorization: Bearer <api_token>
  */
 require __DIR__ . '/bootstrap.php';
+require __DIR__ . '/csv.php';
 currentLang('en');   // machine-readable API: messages are always English
 
 $token = cfg()['api_token'];
@@ -68,6 +72,37 @@ function findByCode(PDO $pdo, string $code): array {
 $pdo    = db();
 $method = $_SERVER['REQUEST_METHOD'];
 $code   = (string)($_GET['code'] ?? '');
+
+/* ── CSV export / import ── */
+if ($method === 'GET' && ($_GET['export'] ?? '') === 'csv') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . exportFilename() . '"');
+    header('Cache-Control: no-store');
+    exportCsv($pdo, fopen('php://output', 'w'));
+    exit;
+}
+if ($method === 'POST' && ($_GET['import'] ?? '') === 'csv') {
+    if (isset($_FILES['file'])) {
+        $f = $_FILES['file'];
+        $text = ($f['error'] ?? 1) === UPLOAD_ERR_OK && is_uploaded_file($f['tmp_name']) && $f['size'] <= CSV_MAX_BYTES
+            ? (string)file_get_contents($f['tmp_name']) : null;
+    } else {
+        $text = (string)file_get_contents('php://input', false, null, 0, CSV_MAX_BYTES + 1);
+    }
+    if ($text === null || strlen($text) > CSV_MAX_BYTES) {
+        respondJson(['ok' => false, 'error' => 'Upload failed or file larger than 5 MB'], 413);
+    }
+    $parsed = parseCsv($text);
+    $dry    = !empty($_GET['dry_run']);
+    if ($dry) {
+        $plan = planImport($pdo, $parsed['rows']);
+        $res  = ['imported' => 0, 'would_import' => count($plan['new']), 'duplicates' => count($plan['duplicates'])];
+    } else {
+        $res = runImport($pdo, $parsed['rows']);
+    }
+    respondJson(['ok' => true, 'dry_run' => $dry, 'format' => $parsed['format'], 'rows' => $parsed['total']] + $res
+        + ['errors' => array_map(fn($e) => ['line' => $e['line'], 'error' => $e['error']], $parsed['errors'])]);
+}
 
 switch ($method) {
     case 'POST':

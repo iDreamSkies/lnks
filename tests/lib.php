@@ -214,6 +214,17 @@ final class Client {
         return $this->request('POST', $path, $body, $headers);
     }
 
+    /** multipart/form-data POST with one file field. */
+    public function upload(string $path, array $fields, string $field, string $filename, string $content, array $headers = []): Response {
+        $b = '----lnks' . bin2hex(random_bytes(8));
+        $body = '';
+        foreach ($fields as $k => $v) {
+            $body .= "--$b\r\nContent-Disposition: form-data; name=\"$k\"\r\n\r\n$v\r\n";
+        }
+        $body .= "--$b\r\nContent-Disposition: form-data; name=\"$field\"; filename=\"$filename\"\r\nContent-Type: text/csv\r\n\r\n$content\r\n--$b--\r\n";
+        return $this->request('POST', $path, $body, array_merge($headers, ['Content-Type: multipart/form-data; boundary=' . $b]));
+    }
+
     public function hasCookie(string $name): bool {
         return isset($this->cookies[$name]);
     }
