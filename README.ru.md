@@ -27,11 +27,13 @@
 - Необязательное название для каждой ссылки
 - Публичный режим (сокращать может любой, лимит по IP) или закрытый (только админ и API)
 - Ссылки на сам сервис отклоняются (нет петель редиректа)
+- **Срок действия и лимит переходов** для ссылки: после них ссылка отвечает `410 Gone` со страницей-заглушкой; лимит соблюдается атомарно даже при одновременных кликах
 
 **Админка**
 - Вход по логину и паролю (оба задаются в установщике), защита от подбора
 - Сводка: ссылки, клики всего, сегодня и за 7 дней
-- Поиск по коду, названию и URL; фильтр по статусу; сортировка по дате, кликам и последнему клику
+- Поиск по коду, названию и URL; фильтр по статусу (активные / истёкшие / отключённые); сортировка по дате, кликам и последнему клику
+- В списке видно, сколько осталось времени и «12 из 100 переходов»; название, срок и лимит меняются на странице ссылки
 - Мини-график за 7 дней у каждой ссылки и страница статистики (график за 30 дней, источники переходов)
 - Включение, отключение, удаление, копирование в один клик, пагинация
 - **QR-код** для каждой ссылки: предпросмотр и скачивание PNG/SVG (генерируется в браузере, без внешних сервисов)
@@ -136,20 +138,20 @@ server {
 Во всех запросах нужен заголовок `Authorization: Bearer ВАШ_API_ТОКЕН`.
 
 ```bash
-# Создать (title необязателен)
+# Создать (title, expires_at и max_clicks необязательны)
 curl -X POST https://lnks.example.com/api.php \
   -H "Authorization: Bearer ВАШ_API_ТОКЕН" -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/very/long/url", "title": "Документация"}'
+  -d '{"url": "https://example.com/very/long/url", "title": "Документация", "expires_at": "2026-12-31 23:59", "max_clicks": 100}'
 
-# Список (q, limit 1-100, offset)
-curl "https://lnks.example.com/api.php?q=docs&limit=20" -H "Authorization: Bearer ВАШ_API_ТОКЕН"
+# Список (q, state=active|expired|disabled, limit 1-100, offset)
+curl "https://lnks.example.com/api.php?q=docs&state=active&limit=20" -H "Authorization: Bearer ВАШ_API_ТОКЕН"
 
 # Детали и клики за 30 дней
 curl "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer ВАШ_API_ТОКЕН"
 
-# Отключить (0) / включить (1)
+# Изменить любое из: status (0/1), title, expires_at, max_clicks — null или "" снимает ограничение
 curl -X PATCH "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer ВАШ_API_ТОКЕН" \
-  -H "Content-Type: application/json" -d '{"status": 0}'
+  -H "Content-Type: application/json" -d '{"status": 1, "expires_at": null, "max_clicks": 500}'
 
 # Удалить
 curl -X DELETE "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization: Bearer ВАШ_API_ТОКЕН"
@@ -160,6 +162,8 @@ curl -X DELETE "https://lnks.example.com/api.php?code=aB3xYz" -H "Authorization:
 ```json
 { "ok": true, "id": 1, "code": "aB3xYz", "short_url": "https://lnks.example.com/aB3xYz", "url": "https://example.com/very/long/url", "title": "Документация" }
 ```
+
+`expires_at` указывается в UTC: `ГГГГ-ММ-ДД ЧЧ:ММ[:СС]`, ISO 8601 со смещением (`2026-12-31T23:59:00+03:00`, переводится в UTC) или `ГГГГ-ММ-ДД` (конец этого дня). В объекте ссылки есть поле `state`: `active`, `disabled`, `expired` (срок истёк) или `limit` (лимит исчерпан).
 
 Ошибки возвращаются как `{ "ok": false, "error": "..." }` с подходящим HTTP-статусом (400, 401, 404, 405, 422, 503).
 
@@ -218,7 +222,7 @@ lnks — намеренно минимальное открытое ядро. С
 
 - Свои алиасы и редактирование ссылок
 - Несколько доменов
-- Срок жизни ссылок, лимиты кликов, ссылки под паролем
+- Ссылки под паролем
 - UTM-конструктор и аналитика по каждому клику (гео, устройство, браузер, уникальные посетители)
 - A/B-тестирование
 - Интеграция с Telegram-ботом

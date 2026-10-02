@@ -2,11 +2,14 @@
 /**
  * lnks — REST API (Bearer token)
  *
- *   POST   /api.php                 create   { "url": "https://…", "title": "optional" }   → 201
- *   GET    /api.php                 list     ?q=&limit=20&offset=0                         → 200
- *   GET    /api.php?code=aB3xYz     details  + clicks for the last 30 days                 → 200
- *   PATCH  /api.php?code=aB3xYz     update   { "status": 0|1 }  (disable / enable)         → 200
- *   DELETE /api.php?code=aB3xYz     delete                                                 → 200
+ *   POST   /api.php                 create   { "url", "title"?, "expires_at"?, "max_clicks"? }      → 201
+ *   GET    /api.php                 list     ?q=&state=active|expired|disabled&limit=20&offset=0   → 200
+ *   GET    /api.php?code=aB3xYz     details  + clicks for the last 30 days                          → 200
+ *   PATCH  /api.php?code=aB3xYz     update   any of { "status", "title", "expires_at", "max_clicks" } → 200
+ *                                            (null or "" removes the expiry / click limit)
+ *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
+ *
+ * expires_at: UTC "YYYY-MM-DD HH:MM[:SS]", ISO 8601 with offset, or "YYYY-MM-DD" (= end of that day)
  *
  * Header: Authorization: Bearer <api_token>
  */
@@ -49,14 +52,15 @@ function linkOut(array $l): array {
         'clicks'        => (int)$l['clicks_total'],
         'last_click_at' => $l['last_click_at'],
         'active'        => (int)$l['status'] === 1,
+        'state'         => linkState($l),   // active | disabled | expired | limit
+        'expires_at'    => $l['expires_at'],
+        'max_clicks'    => $l['max_clicks'] === null ? null : (int)$l['max_clicks'],
         'created_at'    => $l['created_at'],
     ];
 }
 
 function findByCode(PDO $pdo, string $code): array {
-    $st = $pdo->prepare('SELECT * FROM links WHERE code = :c');
-    $st->execute([':c' => $code]);
-    $l = $st->fetch();
+    $l = row($pdo, 'SELECT * FROM links WHERE code = :c', [':c' => $code]);
     if (!$l) respondJson(['ok' => false, 'error' => 'Link not found'], 404);
     return $l;
 }
@@ -68,7 +72,12 @@ $code   = (string)($_GET['code'] ?? '');
 switch ($method) {
     case 'POST':
         $d = requestData();
-        $r = createLink($pdo, (string)($d['url'] ?? ''), clientIp(), isset($d['title']) ? (string)$d['title'] : null);
+        $r = createLink($pdo, (string)($d['url'] ?? ''), clientIp(), [
+            'title'      => isset($d['title']) ? (string)$d['title'] : null,
+            'expires_at' => $d['expires_at'] ?? null,
+            'max_clicks' => $d['max_clicks'] ?? null,
+        ]);
+        if ($r['ok']) $r['state'] = 'active';
         respondJson($r, $r['ok'] ? 201 : 422);
 
     case 'GET':
@@ -79,12 +88,18 @@ switch ($method) {
         $q      = trim((string)($_GET['q'] ?? ''));
         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 20)));
         $offset = max(0, (int)($_GET['offset'] ?? 0));
-        $where  = '';
+        $conds  = [];
         $params = [];
         if ($q !== '') {
-            $where = "WHERE code LIKE :q ESCAPE '\\' OR url LIKE :q ESCAPE '\\' OR title LIKE :q ESCAPE '\\'";
+            $conds[] = "(code LIKE :q ESCAPE '\\' OR url LIKE :q ESCAPE '\\' OR title LIKE :q ESCAPE '\\')";
             $params[':q'] = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
         }
+        $state = (string)($_GET['state'] ?? '');
+        if (in_array($state, ['active', 'expired', 'disabled'], true)) {
+            $conds[] = stateSql($state);
+            if ($state !== 'disabled') $params[':now'] = now();
+        }
+        $where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
         $st = $pdo->prepare("SELECT COUNT(*) FROM links $where");
         $st->execute($params);
         $total = (int)$st->fetchColumn();
@@ -98,11 +113,12 @@ switch ($method) {
 
     case 'PATCH':
         $l = findByCode($pdo, $code);
-        $d = requestData();
-        if (!isset($d['status']) || !in_array($d['status'], [0, 1, '0', '1', false, true], true)) {
-            respondJson(['ok' => false, 'error' => 'Provide "status": 0 or 1'], 422);
+        $d = array_intersect_key(requestData(), array_flip(['status', 'title', 'expires_at', 'max_clicks']));
+        if (!$d) {
+            respondJson(['ok' => false, 'error' => 'Provide at least one of: status, title, expires_at, max_clicks'], 422);
         }
-        $pdo->prepare('UPDATE links SET status = :s WHERE id = :i')->execute([':s' => (int)$d['status'], ':i' => $l['id']]);
+        $r = updateLink($pdo, (int)$l['id'], $d);
+        if (!$r['ok']) respondJson($r, 422);
         respondJson(['ok' => true, 'link' => linkOut(findByCode($pdo, $code))]);
 
     case 'DELETE':

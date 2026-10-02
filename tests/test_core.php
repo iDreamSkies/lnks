@@ -15,7 +15,7 @@ test('core: createLink validates URLs', function () {
     }
     eq(false, createLink($pdo, 'https://example.com/' . str_repeat('a', 2100))['ok'], 'rejects too long');
     eq(false, createLink($pdo, baseUrl() . '/abc')['ok'], 'rejects links to itself');
-    $r = createLink($pdo, 'https://example.com/ok', null, 'Тест');
+    $r = createLink($pdo, 'https://example.com/ok', null, ['title' => 'Тест']);
     eq(true, $r['ok']);
     ok(preg_match('~^[A-Za-z0-9]{6}$~', $r['code']) === 1, 'code format');
     eq('Тест', $r['title']);
@@ -31,6 +31,6 @@ test('core: generated codes are unique', function () {
 
 test('core: title is trimmed and capped at 120 chars', function () {
     app();
-    $r = createLink(db(), 'https://example.com/t', null, "  " . str_repeat('я', 200) . "\n");
+    $r = createLink(db(), 'https://example.com/t', null, ['title' => "  " . str_repeat('я', 200) . "\n"]);
     eq(120, preg_match_all('~.~u', $r['title']));
 });

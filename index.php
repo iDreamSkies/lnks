@@ -18,9 +18,7 @@ if ($uri !== '' && preg_match('~^[a-zA-Z0-9]{4,12}$~', $uri)) {
     }
 
     $pdo = db();
-    $st  = $pdo->prepare('SELECT id, url, status FROM links WHERE code = :c LIMIT 1');
-    $st->execute([':c' => $uri]);
-    $link = $st->fetch();
+    $link = row($pdo, 'SELECT id, url, status, clicks_total, expires_at, max_clicks FROM links WHERE code = :c LIMIT 1', [':c' => $uri]);
 
     header('X-Robots-Tag: noindex');
 
@@ -30,7 +28,18 @@ if ($uri !== '' && preg_match('~^[a-zA-Z0-9]{4,12}$~', $uri)) {
         exit;
     }
 
-    if (!isBotRequest()) recordClick($pdo, (int)$link['id']);
+    // Expired or out of clicks → 410 Gone. The click limit is enforced atomically in recordClick().
+    $state = linkState($link);
+    if ($state === 'active' && !isBotRequest() && !recordClick($pdo, (int)$link['id'])) {
+        $state = 'limit';
+    }
+    if ($state !== 'active') {
+        http_response_code(410);
+        header('Cache-Control: no-store');
+        $msg = $state === 'expired' ? t('gone.expired', ['date' => substr($link['expires_at'], 0, 16)]) : t('gone.limit');
+        renderLayout(t('gone.title'), notFoundBody($msg, t('gone.title')), ['nav' => 'public']);
+        exit;
+    }
 
     header('Cache-Control: private, no-cache');
     header('Location: ' . $link['url'], true, 302);
@@ -110,6 +119,6 @@ renderLayout(t('home.title'), '
     'scripts'     => $result ? [QR_SCRIPT] : [],
 ]);
 
-function notFoundBody(string $msg): string {
-    return '<section class="hero"><h1>404</h1><p class="tagline">' . e($msg) . '</p><p><a class="btn" href="/">' . te('nf.back') . '</a></p></section>';
+function notFoundBody(string $msg, string $heading = '404'): string {
+    return '<section class="hero"><h1>' . e($heading) . '</h1><p class="tagline">' . e($msg) . '</p><p><a class="btn" href="/">' . te('nf.back') . '</a></p></section>';
 }

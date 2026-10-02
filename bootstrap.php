@@ -6,7 +6,7 @@
 
 require_once __DIR__ . '/layout.php';
 
-const LNKS_SCHEMA_VERSION = 2;
+const LNKS_SCHEMA_VERSION = 3;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -66,18 +66,46 @@ function db(): PDO {
     return $pdo;
 }
 
+/*
+ * Read helpers that close the cursor right away. An open cursor keeps a SQLite read
+ * transaction alive; a later write on the same connection then fails with SQLITE_BUSY
+ * (no retry) if another request committed in between. Use these before any write.
+ */
+function scalar(PDO $pdo, string $sql, array $params = []) {
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $v = $st->fetchColumn();
+    $st->closeCursor();
+    return $v;
+}
+
+function row(PDO $pdo, string $sql, array $params = []): ?array {
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $r = $st->fetch(PDO::FETCH_ASSOC);
+    $st->closeCursor();
+    return $r ?: null;
+}
+
 /** Creates the schema on a fresh DB and upgrades databases from older versions. */
 function migrate(PDO $pdo): void {
-    $ver = (int)$pdo->query('PRAGMA user_version')->fetchColumn();
-    if ($ver >= LNKS_SCHEMA_VERSION) return;
+    if ((int)scalar($pdo, 'PRAGMA user_version') >= LNKS_SCHEMA_VERSION) return;
 
     $pdo->exec('BEGIN IMMEDIATE');
     try {
+        // Another request may have migrated while we waited for the write lock
+        if ((int)scalar($pdo, 'PRAGMA user_version') >= LNKS_SCHEMA_VERSION) {
+            $pdo->exec('COMMIT');
+            return;
+        }
         $pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));   // all statements are IF NOT EXISTS
         $cols = array_column($pdo->query('PRAGMA table_info(links)')->fetchAll(), 'name');
-        if (!in_array('title', $cols, true))         $pdo->exec('ALTER TABLE links ADD COLUMN title TEXT');
+        // Columns added after v1. ADD COLUMN keeps existing rows; new columns start as NULL.
+        $added = ['title' => 'TEXT', 'last_click_at' => 'TEXT', 'expires_at' => 'TEXT', 'max_clicks' => 'INTEGER'];
+        foreach ($added as $col => $type) {
+            if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE links ADD COLUMN $col $type");
+        }
         if (!in_array('last_click_at', $cols, true)) {
-            $pdo->exec('ALTER TABLE links ADD COLUMN last_click_at TEXT');
             $pdo->exec('UPDATE links SET last_click_at = (SELECT MAX(ts) FROM clicks WHERE link_id = links.id)');
         }
         $pdo->exec('PRAGMA user_version=' . LNKS_SCHEMA_VERSION);
@@ -160,9 +188,8 @@ function isAdmin(): bool {
 
 function loginBlocked(PDO $pdo, string $ip, int $max = 5, int $windowMin = 15): bool {
     $pdo->prepare('DELETE FROM login_attempts WHERE ts < :t')->execute([':t' => gmdate('Y-m-d H:i:s', time() - 86400)]);
-    $st = $pdo->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = :ip AND ts > :t');
-    $st->execute([':ip' => $ip, ':t' => gmdate('Y-m-d H:i:s', time() - $windowMin * 60)]);
-    return (int)$st->fetchColumn() >= $max;
+    return (int)scalar($pdo, 'SELECT COUNT(*) FROM login_attempts WHERE ip = :ip AND ts > :t',
+        [':ip' => $ip, ':t' => gmdate('Y-m-d H:i:s', time() - $windowMin * 60)]) >= $max;
 }
 
 function loginFailed(PDO $pdo, string $ip): void {
@@ -175,22 +202,81 @@ function generateCode(PDO $pdo): string {
     $alphabet = $c['alphabet'];
     $max      = strlen($alphabet) - 1;
     $base     = max(4, min(12, (int)$c['length']));   // index.php routes codes of 4–12 chars
-    $st       = $pdo->prepare('SELECT 1 FROM links WHERE code = :c LIMIT 1');
 
     // Grow the code by one char after 10 collisions in a row (only matters when the space fills up).
     for ($len = $base; $len <= 12; $len++) {
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $code = '';
             for ($i = 0; $i < $len; $i++) $code .= $alphabet[random_int(0, $max)];
-            $st->execute([':c' => $code]);
-            if (!$st->fetchColumn()) return $code;
+            if (!scalar($pdo, 'SELECT 1 FROM links WHERE code = :c LIMIT 1', [':c' => $code])) return $code;
         }
     }
     throw new RuntimeException('Short code space exhausted');
 }
 
-/* ── Create link ─────────────────────────────────────────────────── */
-function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = null): array {
+/* ── Link options: expiry and click limit ────────────────────────── */
+
+/**
+ * Parse an expiry date (always UTC unless the string carries an offset).
+ * Accepts "YYYY-MM-DD", "YYYY-MM-DD HH:MM[:SS]", "YYYY-MM-DDTHH:MM" (datetime-local) and ISO 8601 with Z/±HH:MM.
+ * A bare date means the end of that day. Returns [value|null, error|null]; empty input = no expiry.
+ */
+function parseExpiry($v, bool $requireFuture = true): array {
+    if ($v === null || (is_string($v) && trim($v) === '')) return [null, null];
+    $v = trim((string)$v);
+    if (!preg_match('~^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$~', $v, $m)) {
+        return [null, t('err.expires_format')];
+    }
+    try {
+        $dt = new DateTimeImmutable(isset($m[1]) ? $v : $v . ' 23:59:59', new DateTimeZone('UTC'));
+    } catch (Exception $ex) {
+        return [null, t('err.expires_format')];
+    }
+    // Reject values PHP would silently roll over (2026-02-31, 12:61): the parsed value must read back the same
+    $hasTime = isset($m[1]) && $m[1] !== '';
+    if ($dt->format($hasTime ? 'Y-m-d H:i' : 'Y-m-d') !== substr(str_replace('T', ' ', $v), 0, $hasTime ? 16 : 10)) {
+        return [null, t('err.expires_format')];
+    }
+    $utc = $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    if ($requireFuture && $utc <= now()) return [null, t('err.expires_past')];
+    return [$utc, null];
+}
+
+/** Parse a click limit: empty = unlimited. Returns [int|null, error|null]. */
+function parseMaxClicks($v): array {
+    if ($v === null || (is_string($v) && trim($v) === '')) return [null, null];
+    if (is_int($v) || (is_string($v) && preg_match('~^\s*\d{1,10}\s*$~', $v))) {
+        $n = (int)$v;
+        if ($n >= 1 && $n <= 1000000000) return [$n, null];
+    }
+    return [null, t('err.max_clicks')];
+}
+
+/** 'active' | 'disabled' | 'expired' (date passed) | 'limit' (click limit reached) */
+function linkState(array $l): string {
+    if ((int)$l['status'] !== 1) return 'disabled';
+    if (!empty($l['expires_at']) && $l['expires_at'] <= now()) return 'expired';
+    if ($l['max_clicks'] !== null && $l['max_clicks'] !== '' && (int)$l['clicks_total'] >= (int)$l['max_clicks']) return 'limit';
+    return 'active';
+}
+
+/** SQL condition for a link state (named parameter :now must be bound to now()). */
+function stateSql(string $state): string {
+    $gone = "((expires_at IS NOT NULL AND expires_at <= :now) OR (max_clicks IS NOT NULL AND clicks_total >= max_clicks))";
+    switch ($state) {
+        case 'active':   return "(status = 1 AND NOT $gone)";
+        case 'expired':  return "(status = 1 AND $gone)";
+        case 'disabled': return '(status = 0)';
+    }
+    return '1';
+}
+
+/* ── Create / update link ─────────────────────────────────────────── */
+
+/**
+ * @param array $opt title?, expires_at?, max_clicks?
+ */
+function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []): array {
     $url = trim($url);
     if (!isValidUrl($url)) {
         return ['ok' => false, 'error' => t('err.invalid_url')];
@@ -202,17 +288,22 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = 
     if ($own !== '' && hostOf($url) === $own) {
         return ['ok' => false, 'error' => t('err.self')];
     }
-    $title = $title !== null ? trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', $title)) : '';
-    $title = $title === '' ? null : cut($title, 120);
+    $title = cleanTitle($opt['title'] ?? null);
+    [$expires, $err] = parseExpiry($opt['expires_at'] ?? null);
+    if ($err) return ['ok' => false, 'error' => $err];
+    [$maxClicks, $err] = parseMaxClicks($opt['max_clicks'] ?? null);
+    if ($err) return ['ok' => false, 'error' => $err];
 
     // The UNIQUE constraint is the source of truth; retry on a (very rare) race.
     for ($try = 0; $try < 3; $try++) {
         $code = generateCode($pdo);
         try {
-            $pdo->prepare('INSERT INTO links (code, url, title, created_ip, created_at) VALUES (:c, :u, :t, :i, :a)')
-                ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':i' => $ip, ':a' => now()]);
+            $pdo->prepare('INSERT INTO links (code, url, title, expires_at, max_clicks, created_ip, created_at)
+                           VALUES (:c, :u, :t, :e, :m, :i, :a)')
+                ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':e' => $expires, ':m' => $maxClicks, ':i' => $ip, ':a' => now()]);
             return ['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'code' => $code,
-                    'short_url' => baseUrl() . '/' . $code, 'url' => $url, 'title' => $title];
+                    'short_url' => baseUrl() . '/' . $code, 'url' => $url, 'title' => $title,
+                    'expires_at' => $expires, 'max_clicks' => $maxClicks];
         } catch (PDOException $ex) {
             if ($ex->getCode() !== '23000') throw $ex;
         }
@@ -220,13 +311,50 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = 
     return ['ok' => false, 'error' => t('err.alloc')];
 }
 
+function cleanTitle($title): ?string {
+    if ($title === null) return null;
+    $title = trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', (string)$title));
+    return $title === '' ? null : cut($title, 120);
+}
+
+/**
+ * Update editable fields of a link. Only keys present in $f are changed:
+ * title, expires_at, max_clicks (null/'' clears), status (0|1).
+ */
+function updateLink(PDO $pdo, int $id, array $f): array {
+    $set = [];
+    $params = [':id' => $id];
+    if (array_key_exists('title', $f)) {
+        $set[] = 'title = :title';
+        $params[':title'] = cleanTitle($f['title']);
+    }
+    if (array_key_exists('expires_at', $f)) {
+        [$v, $err] = parseExpiry($f['expires_at']);
+        if ($err) return ['ok' => false, 'error' => $err];
+        $set[] = 'expires_at = :exp';
+        $params[':exp'] = $v;
+    }
+    if (array_key_exists('max_clicks', $f)) {
+        [$v, $err] = parseMaxClicks($f['max_clicks']);
+        if ($err) return ['ok' => false, 'error' => $err];
+        $set[] = 'max_clicks = :max';
+        $params[':max'] = $v;
+    }
+    if (array_key_exists('status', $f)) {
+        if (!in_array($f['status'], [0, 1, '0', '1', false, true], true)) return ['ok' => false, 'error' => 'status must be 0 or 1'];
+        $set[] = 'status = :st';
+        $params[':st'] = (int)$f['status'];
+    }
+    if ($set) $pdo->prepare('UPDATE links SET ' . implode(', ', $set) . ' WHERE id = :id')->execute($params);
+    return ['ok' => true];
+}
+
 /* ── Simple per-IP rate limit for the public form ────────────────── */
 function rateLimitOk(PDO $pdo, string $ip): bool {
     $rl    = cfg()['rate_limit'];
     $since = gmdate('Y-m-d H:i:s', time() - (int)$rl['window_min'] * 60);
-    $st = $pdo->prepare('SELECT COUNT(*) FROM links WHERE created_ip = :ip AND created_at > :s');
-    $st->execute([':ip' => $ip, ':s' => $since]);
-    return (int)$st->fetchColumn() < (int)$rl['max'];
+    return (int)scalar($pdo, 'SELECT COUNT(*) FROM links WHERE created_ip = :ip AND created_at > :s',
+        [':ip' => $ip, ':s' => $since]) < (int)$rl['max'];
 }
 
 /* ── Clicks & stats ──────────────────────────────────────────────── */
@@ -237,16 +365,26 @@ function isBotRequest(): bool {
     return $ua === '' || (bool)preg_match('~bot|crawl|spider|slurp|preview|facebookexternalhit|curl|wget|python-requests|headless|monitor|uptime~i', $ua);
 }
 
-function recordClick(PDO $pdo, int $linkId): void {
+/**
+ * Count a click unless the link's click limit is already reached (checked atomically,
+ * so concurrent requests cannot overshoot the limit). Returns false when the limit is reached.
+ */
+function recordClick(PDO $pdo, int $linkId): bool {
     $ref = $_SERVER['HTTP_REFERER'] ?? null;
     $ref = $ref !== null && $ref !== '' ? substr($ref, 0, 255) : null;
     $ts  = now();
     $pdo->exec('BEGIN IMMEDIATE');
-    $pdo->prepare('UPDATE links SET clicks_total = clicks_total + 1, last_click_at = :t WHERE id = :i')
-        ->execute([':t' => $ts, ':i' => $linkId]);
+    $st = $pdo->prepare('UPDATE links SET clicks_total = clicks_total + 1, last_click_at = :t
+                         WHERE id = :i AND (max_clicks IS NULL OR clicks_total < max_clicks)');
+    $st->execute([':t' => $ts, ':i' => $linkId]);
+    if ($st->rowCount() === 0) {
+        $pdo->exec('ROLLBACK');
+        return false;
+    }
     $pdo->prepare('INSERT INTO clicks (link_id, ts, referrer) VALUES (:l, :t, :r)')
         ->execute([':l' => $linkId, ':t' => $ts, ':r' => $ref]);
     $pdo->exec('COMMIT');
+    return true;
 }
 
 /** @return array<string,int> date (Y-m-d) => clicks for the last $days days, oldest first. */
