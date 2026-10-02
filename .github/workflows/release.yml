@@ -1,0 +1,39 @@
+name: Release
+
+# Push a tag like v2.0.0 (matching LNKS_VERSION in layout.php and a CHANGELOG.md section)
+# to test, build lnks-X.Y.Z.zip and publish it as a GitHub release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, zip
+          coverage: none
+          tools: none
+
+      - name: Tests
+        run: php tests/run.php
+
+      - name: Build archive
+        run: php scripts/build-release.php "$GITHUB_REF_NAME"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/lnks-$VERSION.zip" "dist/lnks-$VERSION.zip.sha256" \
+            --title "lnks $VERSION" \
+            --notes-file dist/release-notes.md

@@ -98,9 +98,9 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 
 ### Install over FTP (shared hosting, no SSH)
 
-1. **Download** lnks: on GitHub click **Code → Download ZIP** and unpack it on your computer.
+1. **Download** the latest release: [`lnks-X.Y.Z.zip` on the Releases page](https://github.com/iDreamSkies/lnks/releases/latest), and unpack it on your computer (or use **Code → Download ZIP** for the development version).
 2. **Create a domain or subdomain** in your hosting panel (cPanel, ISPmanager, Plesk, DirectAdmin…), e.g. `s.example.com`, and select **PHP 8.0 or newer** for it.
-3. **Upload the files** with an FTP client (FileZilla, WinSCP or the hosting's file manager) into the folder of that domain — usually `public_html`, `www` or `s.example.com/`. Upload the *contents* of the `lnks-main` folder, including the hidden `.htaccess` file (in FileZilla: *Server → Force showing hidden files*).
+3. **Upload the files** with an FTP client (FileZilla, WinSCP or the hosting's file manager) into the folder of that domain — usually `public_html`, `www` or `s.example.com/`. Upload the *contents* of the unpacked `lnks-X.Y.Z` folder, including the hidden `.htaccess` file (in FileZilla: *Server → Force showing hidden files*).
 4. **Make `storage/` writable**: right-click the `storage` folder → *File permissions* → `775` (or `777` if your host needs it). The root folder must be writable too, once, so the installer can create `config.php`.
 5. **Open your domain** in a browser. The setup wizard checks PHP, SQLite and permissions, then asks for an **admin login and password**.
 6. **Save the API token** shown at the end. Optionally delete `install.php` over FTP.
@@ -343,6 +343,16 @@ php tests/run.php qr       # only tests whose name contains "qr"
 ```
 
 Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. GitHub Actions runs the suite on PHP 8.0, 8.1, 8.2 and 8.3, plus PHP 8.0 without `mbstring` and `ctype`. The runner starts a throw-away copy of the app on the PHP built-in server, checks it over HTTP and removes it afterwards; your `config.php` and database are never touched.
+
+## Releases
+
+Every release on the [Releases page](https://github.com/iDreamSkies/lnks/releases) has a ready-to-upload `lnks-X.Y.Z.zip` (only the files a server needs: no tests, docs or Git data) and its SHA-256 checksum. What changed is in [CHANGELOG.md](CHANGELOG.md).
+
+Making a release (maintainers):
+
+1. Set `LNKS_VERSION` in `layout.php` and add a `## [X.Y.Z]` section to `CHANGELOG.md`.
+2. Merge to `main`, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. The *Release* workflow runs the tests, builds the archive with `php scripts/build-release.php vX.Y.Z` (it refuses a tag that does not match the version) and publishes the release with the CHANGELOG section as its notes.
 
 ## Third-party code
 

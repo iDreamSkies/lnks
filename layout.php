@@ -4,7 +4,7 @@
  * Safe to include before config.php exists (used by the installer).
  */
 
-const LNKS_VERSION = '1.2.0';
+const LNKS_VERSION = '2.0.0';
 
 require_once __DIR__ . '/i18n.php';
 
