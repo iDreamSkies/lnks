@@ -1,3 +1,4 @@
 config.php
 storage/*.sqlite
 storage/*.sqlite-*
+storage/import-*.json
