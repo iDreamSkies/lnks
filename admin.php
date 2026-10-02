@@ -102,6 +102,21 @@ function countryFlag(string $cc): string {
     return $out;
 }
 
+/** Clickable #tag chips that filter the list by that tag. */
+function tagChips(array $tags, array $filters = []): string {
+    if (!$tags) return '';
+    $out = '';
+    foreach ($tags as $t) {
+        $out .= '<a class="chip" href="' . e(adminUrl(['tag' => $t] + $filters)) . '">#' . e($t) . '</a>';
+    }
+    return '<div class="chips">' . $out . '</div>';
+}
+
+/** Suggestions for the tag inputs (whole-value completion; several tags are typed comma-separated). */
+function tagDatalist(PDO $pdo): string {
+    return '<datalist id="tag-list">' . implode('', array_map(fn($n) => '<option value="' . e($n) . '">', array_keys(allTags($pdo)))) . '</datalist>';
+}
+
 /** Lock badge for password-protected links. */
 function lockBadge(array $l): string {
     return empty($l['password_hash']) ? '' : '<span class="badge lock" title="' . te('status.protected') . '">' . icon('lock') . te('status.protected') . '</span>';
@@ -179,6 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             break;
         case 'delete':
             $pdo->prepare('DELETE FROM links WHERE id = :i')->execute([':i' => $id]);
+            pruneTags($pdo);
             flash('ok', t('flash.deleted'));
             break;
         case 'create':
@@ -190,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, [
                 'utm'        => $utm,
                 'code'       => (string)($_POST['code'] ?? ''),
+                'tags'       => (string)($_POST['tags'] ?? ''),
                 'domain'     => (string)($_POST['domain'] ?? ''),
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
@@ -200,6 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             break;
         case 'update':
             $fields = [
+                'tags'       => (string)($_POST['tags'] ?? ''),
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
                 'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
@@ -435,6 +453,7 @@ if (isset($_GET['id'])) {
                 <h1><a href="' . e($short) . '" target="_blank" rel="noopener">' . e($short) . '</a></h1>
                 <p class="muted break">' . ($l['title'] ? e($l['title']) . ' · ' : '') . e($l['url']) . '</p>
                 ' . limitsLine($l) . '
+                ' . tagChips(tagsFor($pdo, [(int)$l['id']])[(int)$l['id']]) . '
             </div>
             <div class="row-actions">
                 <button type="button" class="btn ghost sm" data-copy="' . e($short) . '">' . te('btn.copy') . '</button>
@@ -474,6 +493,7 @@ if (isset($_GET['id'])) {
                 <input type="hidden" name="id" value="' . (int)$l['id'] . '">
                 <input type="hidden" name="back" value="?id=' . (int)$l['id'] . '">
                 <label>' . te('form.title') . '<input type="text" name="title" value="' . e((string)$l['title']) . '" maxlength="120"></label>
+                <label>' . te('tags.label') . '<input type="text" name="tags" value="' . e(implode(', ', tagsFor($pdo, [(int)$l['id']])[(int)$l['id']])) . '" maxlength="400" placeholder="' . te('tags.ph') . '" list="tag-list" autocomplete="off"></label>
                 <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at" value="' . e(dtLocal($l['expires_at'])) . '"></label>
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" value="' . e((string)$l['max_clicks']) . '" placeholder="' . te('form.max_clicks_ph') . '"></label>
                 <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . (empty($l['password_hash']) ? te('form.password_ph') : te('form.password_keep')) . '"></label>
@@ -481,6 +501,7 @@ if (isset($_GET['id'])) {
                 <button type="submit" class="btn">' . te('form.save') . '</button>
             </form>
             <p class="muted small">' . te('stats.settings_hint') . '</p>
+            ' . tagDatalist($pdo) . '
         </section>
     ', $opts);
     exit;
@@ -522,6 +543,11 @@ if ($status !== 'all') {
     $conds[] = stateSql($status);
     if ($status !== 'disabled') $params[':now'] = now();
 }
+$tag = trim((string)($_GET['tag'] ?? ''));
+if ($tag !== '') {
+    $conds[] = tagSql();
+    $params[':tag'] = $tag;
+}
 $where = $conds ? 'WHERE ' . implode(' AND ', $conds) : '';
 
 $st = $pdo->prepare("SELECT COUNT(*) FROM links $where");
@@ -538,7 +564,9 @@ $st->execute();
 $links = $st->fetchAll();
 
 $sparks = sparkData($pdo, array_column($links, 'id'));
-$filters = ['q' => $q, 'status' => $status, 'sort' => $sort];
+$filters = ['q' => $q, 'status' => $status, 'sort' => $sort, 'tag' => $tag];
+$linkTags = tagsFor($pdo, array_column($links, 'id'));
+$tagList  = allTags($pdo);
 $back    = substr(adminUrl($filters + ['page' => $page]), strlen('/admin.php'));   // "?q=..." or ""
 
 $rows = '';
@@ -552,6 +580,7 @@ foreach ($links as $l) {
             ' . stateBadge($state) . lockBadge($l) . '
             ' . (!empty($l['domain']) ? '<div class="muted small">' . e($l['domain']) . '/' . e($l['code']) . '</div>' : '') . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
+            ' . tagChips($linkTags[(int)$l['id']] ?? [], $filters) . '
             ' . limitsLine($l) . '
         </td>
         <td data-label="' . te('th.dest') . '" class="url cell-dest"><a href="' . e($l['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e($l['url']) . '">' . e(hostOf($l['url'])) . '</a>
@@ -573,7 +602,7 @@ foreach ($links as $l) {
     </tr>';
 }
 if ($rows === '') {
-    $rows = '<tr><td colspan="6" class="muted center empty">' . ($q !== '' || $status !== 'all' ? te('empty.filtered') : te('empty.none')) . '</td></tr>';
+    $rows = '<tr><td colspan="6" class="muted center empty">' . ($q !== '' || $status !== 'all' || $tag !== '' ? te('empty.filtered') : te('empty.none')) . '</td></tr>';
 }
 
 // Compact pager: first, current ±2, last
@@ -621,20 +650,25 @@ renderLayout(t('list.title'), '
             <div class="settings">
                 <label class="wide">' . te('form.alias') . '<span class="prefixed"><span class="prefix" data-default-host="' . e(hostOf(baseUrl())) . '">' . e(hostOf(baseUrl())) . '/</span><input type="text" name="code" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" placeholder="' . te('form.alias_ph') . '" autocomplete="off"></span></label>
                 ' . domainSelect() . '
+                <label>' . te('tags.label') . '<input type="text" name="tags" maxlength="400" placeholder="' . te('tags.ph') . '" list="tag-list" autocomplete="off"></label>
                 <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at"></label>
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" placeholder="' . te('form.max_clicks_ph') . '"></label>
                 <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . te('form.password_ph') . '"></label>
             </div>
             ' . utmFields(utmTemplates($pdo)) . '
         </details>
+        ' . tagDatalist($pdo) . '
     </form>
 
     <form method="get" class="filters">
         <input type="search" name="q" value="' . e($q) . '" placeholder="' . te('filter.search_ph') . '" aria-label="' . te('filter.search') . '">
         <select name="status" aria-label="' . te('filter.status') . '">' . $opt('all', te('filter.all'), $status) . $opt('active', te('filter.active'), $status) . $opt('expired', te('filter.expired'), $status) . $opt('disabled', te('filter.disabled'), $status) . '</select>
+        ' . ($tagList ? '<select name="tag" aria-label="' . te('tags.filter') . '"><option value="">' . te('tags.any') . '</option>'
+            . implode('', array_map(fn($n, $c) => '<option value="' . e($n) . '"' . (strcasecmp($n, $tag) === 0 ? ' selected' : '') . '>#' . e($n) . ' (' . $c . ')</option>', array_keys($tagList), $tagList))
+            . '</select>' : '') . '
         <select name="sort" aria-label="' . te('filter.sort') . '">' . $opt('new', te('sort.new'), $sort) . $opt('old', te('sort.old'), $sort) . $opt('clicks', te('sort.clicks'), $sort) . $opt('last', te('sort.last'), $sort) . '</select>
         <button type="submit" class="btn ghost">' . te('filter.apply') . '</button>
-        ' . ($q !== '' || $status !== 'all' || $sort !== 'new' ? '<a href="/admin.php" class="btn ghost">' . te('filter.reset') . '</a>' : '') . '
+        ' . ($q !== '' || $status !== 'all' || $sort !== 'new' || $tag !== '' ? '<a href="/admin.php" class="btn ghost">' . te('filter.reset') . '</a>' : '') . '
     </form>
     <p class="muted small">' . te('list.results', ['n' => $total]) . '</p>
 

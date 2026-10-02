@@ -8,7 +8,7 @@
  * Delimiter (comma, semicolon or tab) and a UTF-8 BOM are detected automatically.
  */
 
-const CSV_COLUMNS    = ['code', 'url', 'title', 'clicks', 'status', 'created_at', 'last_click_at', 'expires_at', 'max_clicks', 'domain'];
+const CSV_COLUMNS    = ['code', 'url', 'title', 'clicks', 'status', 'created_at', 'last_click_at', 'expires_at', 'max_clicks', 'domain', 'tags'];
 const CSV_MAX_BYTES  = 5 * 1024 * 1024;
 const CSV_MAX_ROWS   = 50000;
 
@@ -25,6 +25,7 @@ const CSV_ALIASES = [
     'max_clicks' => 'max_clicks', 'click_limit' => 'max_clicks',
     'ip' => 'ip', 'created_ip' => 'ip',
     'domain' => 'domain', 'host' => 'domain',
+    'tags' => 'tags', 'tag' => 'tags', 'labels' => 'tags',
 ];
 
 /* ── Export ──────────────────────────────────────────────────────── */
@@ -48,12 +49,17 @@ function csvLine(array $cells): string {
 function exportCsv(PDO $pdo, $out): int {
     fwrite($out, "\xEF\xBB\xBF" . csvLine(CSV_COLUMNS));
     $n = 0;
+    $tags = [];
+    foreach ($pdo->query('SELECT lt.link_id, t.name FROM link_tags lt JOIN tags t ON t.id = lt.tag_id ORDER BY t.name COLLATE NOCASE') as $r) {
+        $tags[(int)$r['link_id']][] = $r['name'];
+    }
     $st = $pdo->query('SELECT * FROM links ORDER BY id');
     while ($l = $st->fetch(PDO::FETCH_ASSOC)) {
         fwrite($out, csvLine([
             csvSafe($l['code']), csvSafe($l['url']), csvSafe((string)$l['title']), (int)$l['clicks_total'],
             (int)$l['status'] === 1 ? 'active' : 'disabled', $l['created_at'], (string)$l['last_click_at'],
             (string)$l['expires_at'], $l['max_clicks'] === null ? '' : (int)$l['max_clicks'], (string)$l['domain'],
+            csvSafe(implode(', ', $tags[(int)$l['id']] ?? [])),
         ]));
         $n++;
     }
@@ -172,6 +178,8 @@ function normalizeImportRow(array $r): array {
     if (isOwnUrl($url)) return [null, t('err.self')];
     [$domain, $err] = parseDomain($r['domain'] ?? '');
     if ($err) return [null, $err];
+    [$tags, $err] = parseTags($r['tags'] ?? '');
+    if ($err) return [null, $err];
 
     $code = trim($r['code'] ?? '');
     if ($code !== '' && !isValidCode($code)) return [null, t('csv.err_code', ['code' => cut($code, 40, '…')])];
@@ -202,6 +210,7 @@ function normalizeImportRow(array $r): array {
         'max_clicks'    => $max,
         'ip'            => filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null,
         'domain'        => $domain,
+        'tags'          => $tags,
     ], null];
 }
 
@@ -248,6 +257,7 @@ function runImport(PDO $pdo, array $rows): array {
                 ':n' => $r['clicks'], ':lc' => $r['last_click_at'], ':e' => $r['expires_at'], ':m' => $r['max_clicks'],
                 ':s' => $r['status'], ':ip' => $r['ip'], ':d' => $r['domain'] ?? null, ':a' => $r['created_at'],
             ]);
+            if (!empty($r['tags'])) addLinkTags($pdo, [(int)$pdo->lastInsertId()], $r['tags']);
         }
         $pdo->exec('COMMIT');
     } catch (Throwable $ex) {

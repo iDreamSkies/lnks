@@ -266,6 +266,11 @@ td.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .qr-actions .btn { flex: 1 1 auto; }
 
+/* Tags */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip { display: inline-block; padding: 0 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+.chip:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+
 /* Link statistics */
 .period-bar { margin: -6px 0 14px; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 0.9rem; }

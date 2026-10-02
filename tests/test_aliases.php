@@ -64,5 +64,5 @@ test('aliases: CSV carries the domain column both ways', function () {
     $exp = (new Client())->request('GET', '/api.php?export=csv', null, ['Authorization: Bearer ' . TEST_API_TOKEN])->body;
     contains(',max_clicks,domain', $exp);
     contains('csv-dom,https://example.com/csv-dom,', $exp);
-    ok(preg_match('~csv-dom,[^\r\n]*,go\.test\r\n~', $exp) === 1, 'domain exported');
+    ok(preg_match('~csv-dom,[^\r\n]*,go\.test(,[^\r\n]*)?\r\n~', $exp) === 1, 'domain exported');
 });

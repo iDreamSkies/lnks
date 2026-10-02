@@ -8,7 +8,7 @@ require_once __DIR__ . '/layout.php';
 require_once __DIR__ . '/ua.php';
 require_once __DIR__ . '/geo.php';
 
-const LNKS_SCHEMA_VERSION = 7;
+const LNKS_SCHEMA_VERSION = 8;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -437,11 +437,87 @@ function resolveUtm(PDO $pdo, $templateRef, $fields): array {
     return [$merged, null];
 }
 
+/* ── Tags ────────────────────────────────────────────────────────── */
+
+/**
+ * Parse tags from "a, b" or ['a', 'b']: 1–32 chars of letters, digits, space, "-" or "_";
+ * duplicates (case-insensitive) dropped, at most 10. Returns [names, error|null].
+ */
+function parseTags($in): array {
+    if ($in === null || $in === '') return [[], null];
+    $parts = is_array($in) ? $in : explode(',', (string)$in);
+    $out = [];
+    foreach ($parts as $p) {
+        if (!is_scalar($p)) return [[], t('tags.err')];
+        $p = trim(preg_replace('~\s+~u', ' ', (string)$p));
+        if ($p === '') continue;
+        if (!preg_match('~^[\p{L}\p{N} _-]{1,32}$~u', $p)) return [[], t('tags.err')];
+        $key = function_exists('mb_strtolower') ? mb_strtolower($p, 'UTF-8') : strtolower($p);
+        if (!isset($out[$key])) $out[$key] = $p;   // first spelling wins
+    }
+    if (count($out) > 10) return [[], t('tags.err_many')];
+    return [array_values($out), null];
+}
+
+/** Replace the tags of a link; tags left without links are removed. */
+function setLinkTags(PDO $pdo, int $linkId, array $names): void {
+    $pdo->prepare('DELETE FROM link_tags WHERE link_id = :l')->execute([':l' => $linkId]);
+    addLinkTags($pdo, [$linkId], $names);
+    pruneTags($pdo);
+}
+
+/** Add tags to several links (creating missing tags). */
+function addLinkTags(PDO $pdo, array $linkIds, array $names): void {
+    $ins = $pdo->prepare('INSERT OR IGNORE INTO tags (name) VALUES (:n)');
+    $link = $pdo->prepare('INSERT OR IGNORE INTO link_tags (link_id, tag_id) SELECT :l, id FROM tags WHERE name = :n');
+    foreach ($names as $n) {
+        $ins->execute([':n' => $n]);
+        foreach ($linkIds as $id) $link->execute([':l' => (int)$id, ':n' => $n]);
+    }
+}
+
+function removeLinkTag(PDO $pdo, array $linkIds, string $name): void {
+    $st = $pdo->prepare('DELETE FROM link_tags WHERE link_id = :l AND tag_id = (SELECT id FROM tags WHERE name = :n)');
+    foreach ($linkIds as $id) $st->execute([':l' => (int)$id, ':n' => $name]);
+    pruneTags($pdo);
+}
+
+function pruneTags(PDO $pdo): void {
+    $pdo->exec('DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM link_tags)');
+}
+
+/** @return array<int,string[]> link id => tag names (sorted) for the given links. */
+function tagsFor(PDO $pdo, array $linkIds): array {
+    $out = array_fill_keys(array_map('intval', $linkIds), []);
+    if (!$linkIds) return $out;
+    $in = implode(',', array_fill(0, count($linkIds), '?'));
+    $st = $pdo->prepare("SELECT lt.link_id, t.name FROM link_tags lt JOIN tags t ON t.id = lt.tag_id
+                         WHERE lt.link_id IN ($in) ORDER BY t.name COLLATE NOCASE");
+    $st->execute(array_map('intval', $linkIds));
+    foreach ($st->fetchAll() as $r) $out[(int)$r['link_id']][] = $r['name'];
+    return $out;
+}
+
+/** @return array<string,int> every tag => number of links. */
+function allTags(PDO $pdo): array {
+    $out = [];
+    foreach ($pdo->query('SELECT t.name, COUNT(lt.link_id) c FROM tags t LEFT JOIN link_tags lt ON lt.tag_id = t.id
+                          GROUP BY t.id ORDER BY t.name COLLATE NOCASE')->fetchAll() as $r) {
+        $out[$r['name']] = (int)$r['c'];
+    }
+    return $out;
+}
+
+/** SQL condition "link has tag :tag" for list filters. */
+function tagSql(): string {
+    return 'id IN (SELECT lt.link_id FROM link_tags lt JOIN tags t ON t.id = lt.tag_id WHERE t.name = :tag)';
+}
+
 /* ── Create / update link ─────────────────────────────────────────── */
 
 /**
  * @param array $opt title?, expires_at?, max_clicks?, password?, utm? (array utm_* => value, see resolveUtm),
- *                   code? (custom alias), domain? (one of allowedHosts(); empty = any)
+ *                   code? (custom alias), domain? (one of allowedHosts(); empty = any), tags? ("a, b" or array)
  */
 function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []): array {
     $url = trim($url);
@@ -462,6 +538,8 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []):
     if ($alias !== '' && !isValidCode($alias)) return ['ok' => false, 'error' => t('err.alias')];
     [$domain, $err] = parseDomain($opt['domain'] ?? '');
     if ($err) return ['ok' => false, 'error' => $err];
+    [$tags, $err] = parseTags($opt['tags'] ?? null);
+    if ($err) return ['ok' => false, 'error' => $err];
     $title = cleanTitle($opt['title'] ?? null);
     [$expires, $err] = parseExpiry($opt['expires_at'] ?? null);
     if ($err) return ['ok' => false, 'error' => $err];
@@ -478,7 +556,9 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []):
                            VALUES (:c, :u, :t, :e, :m, :p, :d, :i, :a)')
                 ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':e' => $expires, ':m' => $maxClicks,
                            ':p' => $pwHash, ':d' => $domain, ':i' => $ip, ':a' => now()]);
-            return ['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'code' => $code, 'domain' => $domain,
+            $id = (int)$pdo->lastInsertId();
+            if ($tags) addLinkTags($pdo, [$id], $tags);
+            return ['ok' => true, 'id' => $id, 'code' => $code, 'domain' => $domain, 'tags' => $tags,
                     'short_url' => shortUrl(['code' => $code, 'domain' => $domain]), 'url' => $url, 'title' => $title,
                     'expires_at' => $expires, 'max_clicks' => $maxClicks, 'protected' => $pwHash !== null];
         } catch (PDOException $ex) {
@@ -498,7 +578,7 @@ function cleanTitle($title): ?string {
 /**
  * Update editable fields of a link. Only keys present in $f are changed:
  * title, expires_at, max_clicks (null/'' clears), status (0|1),
- * password (non-empty string sets a new one; null or '' removes it).
+ * password (non-empty string sets a new one; null or '' removes it), tags (replaces the set; [] or '' clears).
  */
 function updateLink(PDO $pdo, int $id, array $f): array {
     $set = [];
@@ -530,7 +610,13 @@ function updateLink(PDO $pdo, int $id, array $f): array {
         $set[] = 'status = :st';
         $params[':st'] = (int)$f['status'];
     }
+    $tags = null;
+    if (array_key_exists('tags', $f)) {
+        [$tags, $err] = parseTags($f['tags']);
+        if ($err) return ['ok' => false, 'error' => $err];
+    }
     if ($set) $pdo->prepare('UPDATE links SET ' . implode(', ', $set) . ' WHERE id = :id')->execute($params);
+    if ($tags !== null) setLinkTags($pdo, $id, $tags);
     return ['ok' => true];
 }
 

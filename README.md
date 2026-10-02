@@ -61,6 +61,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Login + password (you choose both in the installer), brute-force lockout
 - Dashboard: total links, total clicks, clicks today and over 7 days
 - Search by code, title or URL; filter by status (active / expired / disabled); sort by date, clicks or last click
+- **Tags**: comma-separated on create or in the link settings, `#tag` chips in the list, filter by tag
 - Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
 - Per-link 7-day sparkline and a statistics page: 7 / 30 / 90-day periods compared with the previous period, clicks per day and per hour, referrers, devices, browsers, operating systems and (optionally) countries
 - Enable / disable / delete, one-click copy, pagination
@@ -180,7 +181,7 @@ server {
 
 **Admin → Import / Export.**
 
-- **Export** downloads every link: `code,url,title,clicks,status,created_at,last_click_at,expires_at,max_clicks` (UTF-8 with BOM, opens in Excel). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets do not run them as formulas; the importer removes it again.
+- **Export** downloads every link: `code,url,title,clicks,status,created_at,last_click_at,expires_at,max_clicks,domain,tags` (tags comma-separated inside one cell) (UTF-8 with BOM, opens in Excel). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets do not run them as formulas; the importer removes it again.
 - **Import** takes a CSV with a header row. Only `url` is required; the other export columns are optional, in any order. Comma, semicolon (Excel in many locales) and tab delimiters are detected automatically, as is a single header-less column of URLs.
 - You first see a **preview**: how many rows are new, which codes are already taken (skipped, never overwritten), and every row with an error and its line number. Nothing is written until you confirm.
 - Rows without a code get a generated one; an optional `domain` column binds a row to one of the configured domains. Imported codes may be 1–32 characters: letters, digits, `-`, `_`. Reserved words (`admin`, `api`, `public`, …) are rejected.
@@ -229,6 +230,12 @@ All requests need `Authorization: Bearer YOUR_API_TOKEN`.
 curl -X POST https://lnks.example.com/api.php \
   -H "Authorization: Bearer YOUR_API_TOKEN" -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/very/long/url", "title": "Docs", "expires_at": "2026-12-31 23:59", "max_clicks": 100}'
+
+# Tags: on create, list by tag, replace (PATCH "tags": [] clears), all tags with counts
+curl -X POST https://lnks.example.com/api.php -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" -d '{"url": "https://example.com/a", "tags": ["promo", "autumn"]}'
+curl "https://lnks.example.com/api.php?tag=promo" -H "Authorization: Bearer YOUR_API_TOKEN"
+curl "https://lnks.example.com/api.php?tags=1" -H "Authorization: Bearer YOUR_API_TOKEN"
 
 # Custom short name, bound to one of the configured domains
 curl -X POST https://lnks.example.com/api.php \

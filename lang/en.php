@@ -283,4 +283,12 @@ return [
     'dev.desktop' => 'Desktop',
     'dev.mobile' => 'Phone',
     'dev.tablet' => 'Tablet',
+
+    // tags
+    'tags.label' => 'Tags',
+    'tags.ph' => 'promo, autumn',
+    'tags.err' => 'Tags may contain 1–32 letters, digits, spaces, "-" or "_".',
+    'tags.err_many' => 'Up to 10 tags per link.',
+    'tags.filter' => 'Tag',
+    'tags.any' => 'Any tag',
 ];
