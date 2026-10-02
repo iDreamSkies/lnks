@@ -4,7 +4,7 @@
 ![Dependencies: none](https://img.shields.io/badge/dependencies-none-success.svg)
 [![Tests](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml/badge.svg)](https://github.com/iDreamSkies/lnks/actions/workflows/tests.yml)
 
-[English](README.md) · **Русский**
+[English](README.md) · **Русский** · [Сайт проекта](https://idreamskies.github.io/lnks/ru/)
 
 # lnks
 
