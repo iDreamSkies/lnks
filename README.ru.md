@@ -17,19 +17,6 @@
 
 Никаких трекинг-пикселей, сторонних скриптов и внешних сервисов: QR-коды рисуются в браузере, статистика хранится в вашем файле SQLite.
 
-<p align="center">
-  <img src="docs/screenshots/admin.png" alt="Админка: ссылки с графиками кликов, сроком действия и лимитами" width="49%">
-  <img src="docs/screenshots/stats.png" alt="Статистика и настройки ссылки" width="49%">
-</p>
-<p align="center">
-  <img src="docs/screenshots/qr.png" alt="Окно QR-кода со скачиванием PNG и SVG" width="49%">
-  <img src="docs/screenshots/import.png" alt="Предпросмотр импорта CSV с распознанной выгрузкой YOURLS" width="49%">
-</p>
-<p align="center">
-  <img src="docs/screenshots/home.png" alt="Публичная страница" width="49%">
-  <img src="docs/screenshots/mobile-ru.png" alt="Мобильная версия, русский интерфейс" width="22%">
-</p>
-
 ## Сравнение
 
 | | **lnks** | YOURLS | Shlink | Kutt |

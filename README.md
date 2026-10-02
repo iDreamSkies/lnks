@@ -17,19 +17,6 @@ Minimal self-hosted URL shortener. One small PHP app, SQLite, zero dependencies.
 
 No tracking pixels, no third-party scripts, no external services: QR codes are drawn in the browser, statistics stay in your SQLite file.
 
-<p align="center">
-  <img src="docs/screenshots/admin.png" alt="Admin panel: links with click sparklines, expiry and click limits" width="49%">
-  <img src="docs/screenshots/stats.png" alt="Per-link statistics and settings" width="49%">
-</p>
-<p align="center">
-  <img src="docs/screenshots/qr.png" alt="QR code dialog with PNG and SVG download" width="49%">
-  <img src="docs/screenshots/import.png" alt="CSV import preview recognising a YOURLS export" width="49%">
-</p>
-<p align="center">
-  <img src="docs/screenshots/home.png" alt="Public page" width="49%">
-  <img src="docs/screenshots/mobile-ru.png" alt="Mobile layout, Russian interface" width="22%">
-</p>
-
 ## How it compares
 
 | | **lnks** | YOURLS | Shlink | Kutt |
