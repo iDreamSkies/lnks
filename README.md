@@ -9,16 +9,43 @@
 
 Minimal self-hosted URL shortener. One small PHP app, SQLite, zero dependencies.
 
-No Composer, no framework, no Docker, no tracking pixels, no third-party scripts. Upload to any PHP hosting, open it in a browser, and it works.
+> ### Works without SSH and MySQL
+> Upload the files over **FTP**, open your domain in a browser, set a login and password — done.
+> No shell access, no database server to create, no Composer, no Docker, no Node.js.
+> If your hosting runs PHP 8.0+ (almost every shared hosting does), lnks runs there.
+
+No tracking pixels, no third-party scripts, no external services: QR codes are drawn in the browser, statistics stay in your SQLite file.
 
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="Public page" width="49%">
-  <img src="docs/screenshots/admin.png" alt="Admin panel" width="49%">
+  <img src="docs/screenshots/admin.png" alt="Admin panel: links with click sparklines, expiry and click limits" width="49%">
+  <img src="docs/screenshots/stats.png" alt="Per-link statistics and settings" width="49%">
 </p>
 <p align="center">
-  <img src="docs/screenshots/stats.png" alt="Per-link statistics" width="49%">
+  <img src="docs/screenshots/qr.png" alt="QR code dialog with PNG and SVG download" width="49%">
+  <img src="docs/screenshots/import.png" alt="CSV import preview recognising a YOURLS export" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Public page" width="49%">
   <img src="docs/screenshots/mobile-ru.png" alt="Mobile layout, Russian interface" width="22%">
 </p>
+
+## How it compares
+
+| | **lnks** | YOURLS | Shlink | Kutt |
+|---|---|---|---|---|
+| Runtime | PHP 8.0+ | PHP 8.1+ | PHP 8.4+ | Node.js 20+ |
+| Database | SQLite, created automatically | MySQL / MariaDB (create it yourself) | MySQL, MariaDB, PostgreSQL, SQL Server or SQLite | SQLite, PostgreSQL or MySQL / MariaDB |
+| Required PHP extensions | `pdo_sqlite` | `pdo_mysql` | `curl`, `intl`, `gd`, `gmp`/`bcmath`, a PDO driver | — |
+| Install over FTP only (no SSH) | ✅ web installer | ✅ edit `config.php`, then open `/admin` | ❌ CLI installer must run on the server | ❌ needs a Node.js process or Docker |
+| Typical shared PHP hosting | ✅ | ✅ (with MySQL) | rarely | ❌ |
+| Built-in admin UI | ✅ | ✅ | separate app (Shlink Web Client) | ✅ |
+| QR codes | ✅ | plugin | in the web client | ✅ |
+| Expiry date / click limit | ✅ / ✅ | plugins | ✅ / ✅ | ✅ / — |
+| CSV import (incl. from YOURLS) | ✅ in the admin and API | plugin | ✅ CLI importer | — |
+
+<sub>Compared with each project's own repository and README in October 2026 (YOURLS 1.10, Shlink 5, Kutt 3). Spotted something outdated? [Open an issue](https://github.com/iDreamSkies/lnks/issues).</sub>
+
+**Pick lnks** when you want a shortener on cheap shared hosting in a minute, without a database server or console. **Pick YOURLS** if you need its plugin ecosystem and already have MySQL, **Shlink** for multi-domain setups with a separate API-first backend, **Kutt** if you run Node.js or Docker anyway.
 
 ## Features
 
@@ -57,20 +84,34 @@ No Composer, no framework, no Docker, no tracking pixels, no third-party scripts
 
 ## Requirements
 
-- PHP 8.0+ with `pdo_sqlite` (present in every default PHP build)
-- Apache with `mod_rewrite`, or Nginx (config below)
+- PHP 8.0 or newer with `pdo_sqlite` (enabled on virtually every hosting; the installer checks it)
+- Apache with `mod_rewrite` (standard on shared hosting), or Nginx (config below)
+- lnks must live at the **root of a domain or subdomain** (`https://s.example.com/`), not in a subfolder
 
 ## Installation
 
-**Web installer (easiest):** upload the files, point your domain's document root at the project directory and open the site. The setup wizard runs automatically:
+### Install over FTP (shared hosting, no SSH)
 
-1. pick an **admin username and password**,
-2. choose whether anyone may shorten links from the homepage,
-3. copy the generated API token (shown once; it is also stored in `config.php`).
+1. **Download** lnks: on GitHub click **Code → Download ZIP** and unpack it on your computer.
+2. **Create a domain or subdomain** in your hosting panel (cPanel, ISPmanager, Plesk, DirectAdmin…), e.g. `s.example.com`, and select **PHP 8.0 or newer** for it.
+3. **Upload the files** with an FTP client (FileZilla, WinSCP or the hosting's file manager) into the folder of that domain — usually `public_html`, `www` or `s.example.com/`. Upload the *contents* of the `lnks-main` folder, including the hidden `.htaccess` file (in FileZilla: *Server → Force showing hidden files*).
+4. **Make `storage/` writable**: right-click the `storage` folder → *File permissions* → `775` (or `777` if your host needs it). The root folder must be writable too, once, so the installer can create `config.php`.
+5. **Open your domain** in a browser. The setup wizard checks PHP, SQLite and permissions, then asks for an **admin login and password**.
+6. **Save the API token** shown at the end. Optionally delete `install.php` over FTP.
 
-The installer locks itself once `config.php` exists. You may delete `install.php` afterwards.
+The admin panel is at `https://your-domain/admin.php`. Turn on HTTPS in the hosting panel (most offer free Let's Encrypt certificates).
 
-**Manual:**
+<details>
+<summary>Troubleshooting</summary>
+
+- **500 error or every short link shows 404** — `.htaccess` was not uploaded or `mod_rewrite` is off. Re-upload `.htaccess`; on Nginx-only hosting use the config below or ask support to route all requests to `index.php`.
+- **"storage/ writable" is red in the installer** — set permissions of `storage` to `775`, or `777` on hosts where PHP runs as another user.
+- **"PDO SQLite" is red** — enable the `pdo_sqlite` (sometimes called `sqlite3`) extension in the hosting panel's PHP settings.
+- **Styles are missing** — lnks was uploaded into a subfolder; move it to the root of a domain or subdomain.
+
+</details>
+
+### Install with a shell (VPS, manual config)
 
 ```bash
 git clone https://github.com/iDreamSkies/lnks.git
