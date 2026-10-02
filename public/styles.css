@@ -266,6 +266,17 @@ td.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .qr-actions .btn { flex: 1 1 auto; }
 
+/* Bulk actions */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.bulk-bar.has-selection { border-color: var(--accent); }
+.bulk-bar [data-bulk-count] { flex: 1 1 140px; }
+.bulk-bar select, .bulk-bar input[type="text"] { width: auto; padding: 7px 10px; background: var(--bg); }
+.bulk-bar input[type="text"] { flex: 0 1 200px; }
+.bulk-bar input[hidden] { display: none; }
+.select-all-m { display: none; }
+th.cell-check, td.cell-check { width: 1%; padding-right: 0; }
+.cell-check input, .select-all-m input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
 /* Tags */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .chip { display: inline-block; padding: 0 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
@@ -316,6 +327,9 @@ table.breakdown td.share { width: 40%; }
     table.links td.url { max-width: none; }
     /* Card header: code, badge, title and destination read top-down, left-aligned */
     table.links td.cell-link, table.links td.cell-dest { display: block; text-align: left; }
+    table.links tr { position: relative; }
+    table.links td.cell-check { position: absolute; top: 12px; right: 14px; width: auto; padding: 0; }
+    .select-all-m { display: flex; }
     table.links td.cell-link::before, table.links td.cell-dest::before { display: none; }
     table.links td.cell-link { padding-top: 10px; }
     table.links td.cell-link .code { font-size: 1.05rem; margin-right: 6px; }

@@ -513,6 +513,56 @@ function tagSql(): string {
     return 'id IN (SELECT lt.link_id FROM link_tags lt JOIN tags t ON t.id = lt.tag_id WHERE t.name = :tag)';
 }
 
+/* ── Bulk actions ────────────────────────────────────────────────── */
+
+/**
+ * Apply one operation to many links at once: enable | disable | delete | tag | untag.
+ * @return array{ok: bool, affected?: int, error?: string}
+ */
+function bulkAction(PDO $pdo, array $ids, string $op, $tags = null): array {
+    $ids = array_values(array_unique(array_map('intval', $ids)));
+    if (!$ids) return ['ok' => false, 'error' => t('bulk.none')];
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    // Only count links that exist
+    $st = $pdo->prepare("SELECT id FROM links WHERE id IN ($in)");
+    $st->execute($ids);
+    $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    if (!$ids) return ['ok' => false, 'error' => t('bulk.none')];
+    $in = implode(',', array_fill(0, count($ids), '?'));
+
+    $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        switch ($op) {
+            case 'enable':
+            case 'disable':
+                $pdo->prepare("UPDATE links SET status = ? WHERE id IN ($in)")->execute(array_merge([$op === 'enable' ? 1 : 0], $ids));
+                break;
+            case 'delete':
+                $pdo->prepare("DELETE FROM links WHERE id IN ($in)")->execute($ids);
+                pruneTags($pdo);
+                break;
+            case 'tag':
+            case 'untag':
+                [$names, $err] = parseTags($tags);
+                if ($err || !$names) {
+                    $pdo->exec('ROLLBACK');
+                    return ['ok' => false, 'error' => $err ?: t('bulk.need_tag')];
+                }
+                if ($op === 'tag') addLinkTags($pdo, $ids, $names);
+                else foreach ($names as $n) removeLinkTag($pdo, $ids, $n);
+                break;
+            default:
+                $pdo->exec('ROLLBACK');
+                return ['ok' => false, 'error' => t('bulk.bad_op')];
+        }
+        $pdo->exec('COMMIT');
+    } catch (Throwable $ex) {
+        $pdo->exec('ROLLBACK');
+        throw $ex;
+    }
+    return ['ok' => true, 'affected' => count($ids)];
+}
+
 /* ── Create / update link ─────────────────────────────────────────── */
 
 /**

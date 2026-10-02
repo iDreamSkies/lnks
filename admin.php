@@ -228,6 +228,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $r = updateLink($pdo, $id, $fields);
             $r['ok'] ? flash('ok', t('flash.saved')) : flash('error', $r['error']);
             break;
+        case 'bulk':
+            $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? []))))), 0, 500);
+            if (!$ids) {
+                flash('error', t('bulk.none'));
+                break;
+            }
+            $r = bulkAction($pdo, $ids, (string)($_POST['op'] ?? ''), (string)($_POST['tags'] ?? ''));
+            $r['ok'] ? flash('ok', t('bulk.done', ['n' => $r['affected']])) : flash('error', $r['error']);
+            break;
         case 'utm_add':
             $r = saveUtmTemplate($pdo, (string)($_POST['name'] ?? ''), $_POST);
             $r['ok'] ? flash('ok', t('utm.saved')) : flash('error', $r['error']);
@@ -575,6 +584,7 @@ foreach ($links as $l) {
     $active = (int)$l['status'] === 1;
     $state  = linkState($l);
     $rows .= '<tr' . ($state === 'active' ? '' : ' class="disabled"') . '>
+        <td class="cell-check"><input type="checkbox" name="ids[]" value="' . (int)$l['id'] . '" form="bulk" aria-label="' . te('bulk.select_one', ['code' => $l['code']]) . '"></td>
         <td data-label="' . te('th.link') . '" class="cell-link">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
             ' . stateBadge($state) . lockBadge($l) . '
@@ -602,7 +612,7 @@ foreach ($links as $l) {
     </tr>';
 }
 if ($rows === '') {
-    $rows = '<tr><td colspan="6" class="muted center empty">' . ($q !== '' || $status !== 'all' || $tag !== '' ? te('empty.filtered') : te('empty.none')) . '</td></tr>';
+    $rows = '<tr><td colspan="7" class="muted center empty">' . ($q !== '' || $status !== 'all' || $tag !== '' ? te('empty.filtered') : te('empty.none')) . '</td></tr>';
 }
 
 // Compact pager: first, current ±2, last
@@ -672,9 +682,26 @@ renderLayout(t('list.title'), '
     </form>
     <p class="muted small">' . te('list.results', ['n' => $total]) . '</p>
 
+    ' . ($links ? '<form method="post" id="bulk" class="bulk-bar">
+        ' . csrfField() . '
+        <input type="hidden" name="action" value="bulk">
+        <input type="hidden" name="back" value="' . e($back) . '">
+        <label class="checkbox select-all-m"><input type="checkbox" data-select-all> ' . te('bulk.select_all') . '</label>
+        <span class="muted small" data-bulk-count data-none="' . te('bulk.hint') . '" data-some="' . te('bulk.selected') . '">' . te('bulk.hint') . '</span>
+        <select name="op" aria-label="' . te('bulk.action') . '" data-bulk-op>
+            <option value="enable">' . te('bulk.enable') . '</option>
+            <option value="disable">' . te('bulk.disable') . '</option>
+            <option value="tag">' . te('bulk.tag') . '</option>
+            <option value="untag">' . te('bulk.untag') . '</option>
+            <option value="delete">' . te('bulk.delete') . '</option>
+        </select>
+        <input type="text" name="tags" placeholder="' . te('tags.ph') . '" list="tag-list" maxlength="400" aria-label="' . te('tags.label') . '" data-bulk-tags>
+        <button type="submit" class="btn sm" data-bulk-apply data-confirm-delete="' . te('bulk.confirm_delete') . '">' . te('bulk.apply') . '</button>
+    </form>' : '') . '
+
     <div class="table-wrap">
     <table class="links">
-        <thead><tr><th>' . te('th.link') . '</th><th>' . te('th.dest') . '</th><th class="num">' . te('th.clicks') . '</th><th>' . te('th.last') . '</th><th>' . te('th.created') . '</th><th></th></tr></thead>
+        <thead><tr><th class="cell-check"><input type="checkbox" data-select-all aria-label="' . te('bulk.select_all') . '"></th><th>' . te('th.link') . '</th><th>' . te('th.dest') . '</th><th class="num">' . te('th.clicks') . '</th><th>' . te('th.last') . '</th><th>' . te('th.created') . '</th><th></th></tr></thead>
         <tbody>' . $rows . '</tbody>
     </table>
     </div>

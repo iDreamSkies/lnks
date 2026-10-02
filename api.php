@@ -11,6 +11,7 @@
  *   DELETE /api.php?code=aB3xYz     delete                                                          → 200
  *   GET    /api.php?tags=1          all tags with link counts; list links of one tag with ?tag=name  → 200
  *   GET    /api.php?utm_templates=1 saved UTM templates                                             → 200
+ *   POST   /api.php?bulk=1          { "codes": [...], "op": "enable|disable|delete|tag|untag", "tags"? } → 200
  *   GET    /api.php?export=csv      all links as CSV (same file as the admin export)                → 200
  *   POST   /api.php?import=csv      import CSV (raw text/csv body or multipart field "file");
  *                                   add &dry_run=1 to only validate                                 → 200
@@ -123,6 +124,20 @@ if ($method === 'GET' && !empty($_GET['utm_templates'])) {
         'id' => (int)$t['id'], 'name' => $t['name'],
         'source' => $t['source'], 'medium' => $t['medium'], 'campaign' => $t['campaign'],
     ], utmTemplates($pdo))]);
+}
+
+if ($method === 'POST' && !empty($_GET['bulk'])) {
+    $d = requestData();
+    $codes = array_slice(array_values(array_filter((array)($d['codes'] ?? []), 'is_string')), 0, 500);
+    $ids = [];
+    if ($codes) {
+        $in = implode(',', array_fill(0, count($codes), '?'));
+        $st = $pdo->prepare("SELECT id FROM links WHERE code IN ($in)");
+        $st->execute($codes);
+        $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    }
+    $r = bulkAction($pdo, $ids, (string)($d['op'] ?? ''), $d['tags'] ?? null);
+    respondJson($r, $r['ok'] ? 200 : 422);
 }
 
 switch ($method) {
