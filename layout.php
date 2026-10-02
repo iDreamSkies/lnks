@@ -112,8 +112,8 @@ function renderLayout(string $title, string $body, array $o = []): void {
     $links = '';
     if ($nav === 'admin') {
         $links = '<a href="/admin.php">' . te('nav.links') . '</a>'
+            . '<a href="/admin.php?view=utm">' . te('nav.utm') . '</a>'
             . '<a href="/admin.php?view=io">' . te('nav.import') . '</a>'
-            . '<a href="/">' . te('nav.public') . '</a>'
             . '<form method="post" action="/admin.php" class="inline">'
             . '<input type="hidden" name="csrf" value="' . e($o['csrf'] ?? '') . '">'
             . '<button type="submit" name="action" value="logout" class="link">' . te('nav.logout') . '</button></form>';

@@ -149,6 +149,9 @@ details.more { margin-top: 10px; }
 details.more summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; width: max-content; }
 details.more summary:hover { color: var(--text); }
 details.more[open] summary { margin-bottom: 10px; }
+fieldset.utm { border: 1px dashed var(--border); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px 12px; min-width: 0; }
+fieldset.utm legend { color: var(--muted); font-size: 0.85rem; padding: 0 6px; }
+.settings select { width: 100%; padding: 11px 14px; background: var(--bg); }
 .settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; align-items: end; }
 .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
 .settings .btn { height: 46px; }
