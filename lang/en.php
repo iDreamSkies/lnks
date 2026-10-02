@@ -309,4 +309,9 @@ return [
     'bulk.none' => 'No links selected.',
     'bulk.need_tag' => 'Enter at least one tag.',
     'bulk.bad_op' => 'Unknown bulk action.',
+
+    // new version notice
+    'update.available' => 'lnks {v} is available.',
+    'update.link' => 'What’s new',
+    'update.how' => 'Update by uploading the new files over FTP — config.php and storage/ stay as they are.',
 ];

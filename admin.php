@@ -636,8 +636,12 @@ if ($pages > 1) {
 
 $opt = fn(string $v, string $label, string $cur) => '<option value="' . $v . '"' . ($v === $cur ? ' selected' : '') . '>' . $label . '</option>';
 
+$update = availableUpdate();
 renderLayout(t('list.title'), '
     <div class="topbar"><h1>' . te('list.title') . '</h1></div>
+    ' . ($update ? '<p class="alert update" role="status">' . te('update.available', ['v' => $update['version']])
+        . ' <a href="' . e($update['url']) . '" target="_blank" rel="noopener">' . te('update.link') . '</a>'
+        . '<span class="muted small"> · ' . te('update.how') . '</span></p>' : '') . '
     ' . $flashHtml . '
 
     <div class="tiles">

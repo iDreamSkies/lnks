@@ -41,6 +41,8 @@ function cfg(): array {
         'rate_limit'   => ['max' => 20, 'window_min' => 60],
         'domains'      => [],      // extra hosts that serve short links, e.g. ['go.example.com']
         'geoip'        => false,   // country stats from storage/geoip-v4.bin (scripts/build-geoip.php)
+        'update_check' => true,    // look for a newer release once a day (admin panel only); never updates by itself
+        'update_feed'  => 'https://api.github.com/repos/iDreamSkies/lnks/releases/latest',
         'code'         => ['alphabet' => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', 'length' => 6],
     ], require __DIR__ . '/config.php');
 }
@@ -511,6 +513,45 @@ function allTags(PDO $pdo): array {
 /** SQL condition "link has tag :tag" for list filters. */
 function tagSql(): string {
     return 'id IN (SELECT lt.link_id FROM link_tags lt JOIN tags t ON t.id = lt.tag_id WHERE t.name = :tag)';
+}
+
+/* ── New version notice ──────────────────────────────────────────── */
+
+/**
+ * Newer release than LNKS_VERSION, if any: ['version' => '2.1.0', 'url' => 'https://github.com/…'].
+ * Checked at most once a day (cached in storage/update-check.json), only when called — the admin
+ * panel calls it, redirects never do. Any failure (offline, blocked, bad JSON) is silent.
+ */
+function availableUpdate(): ?array {
+    if (empty(cfg()['update_check'])) return null;
+    $cacheFile = dirname(cfg()['db_path']) . '/update-check.json';
+    $cache = is_file($cacheFile) ? json_decode((string)@file_get_contents($cacheFile), true) : null;
+    if (!is_array($cache) || (int)($cache['checked_at'] ?? 0) < time() - 86400) {
+        $cache = ['checked_at' => time()] + fetchLatestRelease((string)cfg()['update_feed']);
+        @file_put_contents($cacheFile, json_encode($cache), LOCK_EX);
+    }
+    $v = (string)($cache['version'] ?? '');
+    if (!preg_match('~^\d+\.\d+\.\d+$~', $v) || !version_compare($v, LNKS_VERSION, '>')) return null;
+    $url = (string)($cache['url'] ?? '');
+    return ['version' => $v, 'url' => preg_match('~^https://github\.com/~', $url) ? $url : 'https://github.com/iDreamSkies/lnks/releases'];
+}
+
+/** @return array{version?: string, url?: string} from a GitHub "latest release" JSON document */
+function fetchLatestRelease(string $feed): array {
+    $headers = ['User-Agent: lnks/' . LNKS_VERSION, 'Accept: application/vnd.github+json'];
+    $body = false;
+    if (!preg_match('~^https?://~', $feed) || ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create(['http' => ['timeout' => 3, 'header' => implode("\r\n", $headers), 'ignore_errors' => true]]);
+        $body = @file_get_contents($feed, false, $ctx);
+    } elseif (function_exists('curl_init')) {
+        $ch = curl_init($feed);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 3, CURLOPT_HTTPHEADER => $headers, CURLOPT_FOLLOWLOCATION => true]);
+        $body = curl_exec($ch);
+        curl_close($ch);
+    }
+    $d = is_string($body) ? json_decode($body, true) : null;
+    if (!is_array($d) || !isset($d['tag_name'])) return [];
+    return ['version' => ltrim((string)$d['tag_name'], 'vV'), 'url' => (string)($d['html_url'] ?? '')];
 }
 
 /* ── Bulk actions ────────────────────────────────────────────────── */

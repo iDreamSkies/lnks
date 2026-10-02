@@ -309,4 +309,9 @@ return [
     'bulk.none' => 'Ссылки не выбраны.',
     'bulk.need_tag' => 'Введите хотя бы один тег.',
     'bulk.bad_op' => 'Неизвестное массовое действие.',
+
+    // new version notice
+    'update.available' => 'Доступна версия lnks {v}.',
+    'update.link' => 'Что нового',
+    'update.how' => 'Обновление — залейте новые файлы по FTP; config.php и storage/ остаются как есть.',
 ];

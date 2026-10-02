@@ -149,7 +149,9 @@ Add the extra hosts to `config.php` (`'domains' => ['go.example.com', 'brand.lin
 
 ### Upgrading
 
-Pull the new files and keep your `config.php` and `storage/`. The database is migrated automatically on the first request. Configs from older versions keep working: a missing `admin_user` defaults to `admin`.
+When a new release is out, the admin panel shows a notice with a link to it (checked once a day via the GitHub API, only from the admin panel; turn off with `'update_check' => false`). lnks never updates itself.
+
+Download the new release and upload its files over the old ones, keeping your `config.php` and `storage/`. The database is migrated automatically on the first request. Configs from older versions keep working: a missing `admin_user` defaults to `admin`.
 
 ### Nginx
 
@@ -305,6 +307,7 @@ Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status 
 | `public_form` | `true` — anyone can shorten from the homepage; `false` — admin/API only |
 | `domains` | Extra hosts that serve short links, e.g. `['go.example.com']` — point them at the same folder; links can be bound to one of them |
 | `geoip` | `true` to record the country of each click from `storage/geoip-v4.bin` (see *Country statistics*); default `false` |
+| `update_check` | `true` (default) — once a day the admin panel asks GitHub for the latest release and shows a notice if it is newer; `false` turns it off |
 | `rate_limit` | `['max' => 20, 'window_min' => 60]` — public form limit per IP |
 | `trust_proxy` | `true` to read the client IP from `X-Forwarded-For` (only behind your own reverse proxy) |
 | `code.length` | Short code length (default 6, clamped to 4–12) |
