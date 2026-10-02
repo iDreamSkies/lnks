@@ -31,7 +31,9 @@ function cfg(): array {
         'timezone'     => 'UTC',
         'db_path'      => __DIR__ . '/storage/lnks.sqlite',
         'trust_proxy'  => false,   // read the client IP from X-Forwarded-For (set only behind your own proxy)
+        'lang'         => 'auto',  // 'auto' (browser language), 'en' or 'ru' — visitors can still switch
         'public_form'  => true,
+        'admin_user'   => 'admin',
         'admin_pass_hash' => '',
         'api_token'    => '',
         'rate_limit'   => ['max' => 20, 'window_min' => 60],
@@ -40,6 +42,7 @@ function cfg(): array {
 }
 
 date_default_timezone_set(cfg()['timezone']);
+currentLang();   // resolve the language (and save ?lang=…) before any output
 
 /* ── Session (started lazily — plain redirects never touch it) ───── */
 function startSession(): void {
@@ -190,14 +193,14 @@ function generateCode(PDO $pdo): string {
 function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = null): array {
     $url = trim($url);
     if (!isValidUrl($url)) {
-        return ['ok' => false, 'error' => 'Invalid URL. Only http/https links are accepted.'];
+        return ['ok' => false, 'error' => t('err.invalid_url')];
     }
     if (strlen($url) > 2048) {
-        return ['ok' => false, 'error' => 'URL is too long (max 2048 characters).'];
+        return ['ok' => false, 'error' => t('err.too_long')];
     }
     $own = hostOf(baseUrl());
     if ($own !== '' && hostOf($url) === $own) {
-        return ['ok' => false, 'error' => 'Links to this service itself are not allowed.'];
+        return ['ok' => false, 'error' => t('err.self')];
     }
     $title = $title !== null ? trim(preg_replace('~[\x00-\x1f\x7f]+~', ' ', $title)) : '';
     $title = $title === '' ? null : mb_substr($title, 0, 120);
@@ -214,7 +217,7 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, ?string $title = 
             if ($ex->getCode() !== '23000') throw $ex;
         }
     }
-    return ['ok' => false, 'error' => 'Could not allocate a short code, please retry.'];
+    return ['ok' => false, 'error' => t('err.alloc')];
 }
 
 /* ── Simple per-IP rate limit for the public form ────────────────── */
@@ -278,7 +281,7 @@ function topReferrers(PDO $pdo, int $linkId, int $limit = 10): array {
     $st->execute([':i' => $linkId]);
     $agg = [];
     foreach ($st->fetchAll() as $r) {
-        $h = $r['referrer'] ? (hostOf($r['referrer']) ?: 'Other') : 'Direct';
+        $h = $r['referrer'] ? (hostOf($r['referrer']) ?: t('ref.other')) : t('ref.direct');
         $agg[$h] = ($agg[$h] ?? 0) + (int)$r['c'];
     }
     arsort($agg);
