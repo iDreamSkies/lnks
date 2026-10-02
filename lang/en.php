@@ -291,4 +291,22 @@ return [
     'tags.err_many' => 'Up to 10 tags per link.',
     'tags.filter' => 'Tag',
     'tags.any' => 'Any tag',
+
+    // bulk actions
+    'bulk.action' => 'Bulk action',
+    'bulk.enable' => 'Enable',
+    'bulk.disable' => 'Disable',
+    'bulk.tag' => 'Add tags',
+    'bulk.untag' => 'Remove tags',
+    'bulk.delete' => 'Delete',
+    'bulk.apply' => 'Apply',
+    'bulk.hint' => 'Select links to change several at once',
+    'bulk.selected' => 'Selected: {n}',
+    'bulk.select_all' => 'Select all on this page',
+    'bulk.select_one' => 'Select {code}',
+    'bulk.confirm_delete' => 'Delete the selected links and their click history?',
+    'bulk.done' => 'Updated links: {n}.',
+    'bulk.none' => 'No links selected.',
+    'bulk.need_tag' => 'Enter at least one tag.',
+    'bulk.bad_op' => 'Unknown bulk action.',
 ];

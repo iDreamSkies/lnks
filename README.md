@@ -61,6 +61,7 @@ No tracking pixels, no third-party scripts, no external services: QR codes are d
 - Login + password (you choose both in the installer), brute-force lockout
 - Dashboard: total links, total clicks, clicks today and over 7 days
 - Search by code, title or URL; filter by status (active / expired / disabled); sort by date, clicks or last click
+- **Bulk actions**: tick several links (or all on the page) and enable, disable, add / remove tags or delete them at once
 - **Tags**: comma-separated on create or in the link settings, `#tag` chips in the list, filter by tag
 - Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
 - Per-link 7-day sparkline and a statistics page: 7 / 30 / 90-day periods compared with the previous period, clicks per day and per hour, referrers, devices, browsers, operating systems and (optionally) countries
@@ -236,6 +237,10 @@ curl -X POST https://lnks.example.com/api.php -H "Authorization: Bearer YOUR_API
   -H "Content-Type: application/json" -d '{"url": "https://example.com/a", "tags": ["promo", "autumn"]}'
 curl "https://lnks.example.com/api.php?tag=promo" -H "Authorization: Bearer YOUR_API_TOKEN"
 curl "https://lnks.example.com/api.php?tags=1" -H "Authorization: Bearer YOUR_API_TOKEN"
+
+# Bulk: enable | disable | delete | tag | untag several links by code
+curl -X POST "https://lnks.example.com/api.php?bulk=1" -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" -d '{"codes": ["aB3xYz", "spring-sale"], "op": "tag", "tags": ["q4"]}'
 
 # Custom short name, bound to one of the configured domains
 curl -X POST https://lnks.example.com/api.php \

@@ -182,6 +182,47 @@
         if (prefix) prefix.textContent = (sel.value || prefix.getAttribute('data-default-host')) + '/';
     });
 
+    // Bulk actions on the links list: select all, live counter, tag field only for tag operations, confirm delete
+    var bulk = document.getElementById('bulk');
+    if (bulk) {
+        var boxes = function () { return document.querySelectorAll('input[name="ids[]"][form="bulk"]'); };
+        var counter = bulk.querySelector('[data-bulk-count]');
+        var op = bulk.querySelector('[data-bulk-op]');
+        var tagsInput = bulk.querySelector('[data-bulk-tags]');
+        var refresh = function () {
+            var n = 0;
+            boxes().forEach(function (b) { if (b.checked) n++; });
+            counter.textContent = n ? counter.getAttribute('data-some').replace('{n}', n) : counter.getAttribute('data-none');
+            bulk.classList.toggle('has-selection', n > 0);
+            document.querySelectorAll('[data-select-all]').forEach(function (all) {
+                all.checked = n > 0 && n === boxes().length;
+                all.indeterminate = n > 0 && n < boxes().length;
+            });
+        };
+        var syncTags = function () {
+            var needs = op.value === 'tag' || op.value === 'untag';
+            tagsInput.hidden = !needs;
+            tagsInput.required = needs;
+        };
+        document.addEventListener('change', function (ev) {
+            if (ev.target.matches('[data-select-all]')) {
+                boxes().forEach(function (b) { b.checked = ev.target.checked; });
+                refresh();
+            } else if (ev.target.matches('input[name="ids[]"]')) {
+                refresh();
+            } else if (ev.target === op) {
+                syncTags();
+            }
+        });
+        bulk.addEventListener('submit', function (ev) {
+            if (op.value === 'delete' && !window.confirm(bulk.querySelector('[data-bulk-apply]').getAttribute('data-confirm-delete'))) {
+                ev.preventDefault();
+            }
+        });
+        syncTags();
+        refresh();
+    }
+
     // Select the freshly created short URL right away
     var result = document.querySelector('.result input[data-select]');
     if (result) result.select();
