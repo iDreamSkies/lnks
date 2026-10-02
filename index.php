@@ -18,9 +18,12 @@ if ($uri !== '' && isValidCode($uri)) {
     }
 
     $pdo = db();
-    $link = row($pdo, 'SELECT id, url, status, clicks_total, expires_at, max_clicks, password_hash FROM links WHERE code = :c LIMIT 1', [':c' => $uri]);
+    $link = row($pdo, 'SELECT id, url, status, clicks_total, expires_at, max_clicks, password_hash, domain FROM links WHERE code = :c LIMIT 1', [':c' => $uri]);
 
     header('X-Robots-Tag: noindex');
+
+    // A link bound to a domain only answers on that host
+    if ($link && !empty($link['domain']) && $link['domain'] !== requestHost()) $link = null;
 
     if (!$link || (int)$link['status'] !== 1) {
         http_response_code(404);

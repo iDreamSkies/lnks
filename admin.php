@@ -159,6 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             }
             $r = createLink($pdo, (string)($_POST['url'] ?? ''), $ip, [
                 'utm'        => $utm,
+                'code'       => (string)($_POST['code'] ?? ''),
+                'domain'     => (string)($_POST['domain'] ?? ''),
                 'title'      => (string)($_POST['title'] ?? ''),
                 'expires_at' => (string)($_POST['expires_at'] ?? ''),
                 'max_clicks' => (string)($_POST['max_clicks'] ?? ''),
@@ -209,6 +211,15 @@ $flashHtml = $flash
     ? '<p class="alert ' . ($flash['type'] === 'ok' ? 'ok' : 'error') . '" role="status">' . e($flash['msg']) . '</p>'
     : '';
 $opts = ['nav' => 'admin', 'csrf' => csrfToken(), 'scripts' => [QR_SCRIPT]];
+
+/** Domain picker for the create form; only shown when extra domains are configured. */
+function domainSelect(): string {
+    $hosts = allowedHosts();
+    if (count($hosts) < 2) return '';
+    $opts = '<option value="">' . te('form.domain_any') . '</option>';
+    foreach ($hosts as $h) $opts .= '<option value="' . e($h) . '">' . e($h) . '</option>';
+    return '<label>' . te('form.domain') . '<select name="domain">' . $opts . '</select></label>';
+}
 
 /** UTM inputs (+ template picker) shared by the create form. */
 function utmFields(array $templates): string {
@@ -360,7 +371,7 @@ if (isset($_GET['id'])) {
         exit;
     }
 
-    $short  = baseUrl() . '/' . $l['code'];
+    $short  = shortUrl($l);
     $daily  = dailyClicks($pdo, [(int)$l['id']], 30);
     $labels = [];
     foreach (array_keys($daily) as $d) $labels[$d] = $d;
@@ -481,13 +492,14 @@ $back    = substr(adminUrl($filters + ['page' => $page]), strlen('/admin.php'));
 
 $rows = '';
 foreach ($links as $l) {
-    $short  = baseUrl() . '/' . $l['code'];
+    $short  = shortUrl($l);
     $active = (int)$l['status'] === 1;
     $state  = linkState($l);
     $rows .= '<tr' . ($state === 'active' ? '' : ' class="disabled"') . '>
         <td data-label="' . te('th.link') . '" class="cell-link">
             <a href="/admin.php?id=' . (int)$l['id'] . '" class="code">' . e($l['code']) . '</a>
             ' . stateBadge($state) . lockBadge($l) . '
+            ' . (!empty($l['domain']) ? '<div class="muted small">' . e($l['domain']) . '/' . e($l['code']) . '</div>' : '') . '
             ' . ($l['title'] ? '<div class="muted small">' . e($l['title']) . '</div>' : '') . '
             ' . limitsLine($l) . '
         </td>
@@ -556,6 +568,8 @@ renderLayout(t('list.title'), '
         <details class="more">
             <summary>' . te('form.more') . '</summary>
             <div class="settings">
+                <label class="wide">' . te('form.alias') . '<span class="prefixed"><span class="prefix" data-default-host="' . e(hostOf(baseUrl())) . '">' . e(hostOf(baseUrl())) . '/</span><input type="text" name="code" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,31}" placeholder="' . te('form.alias_ph') . '" autocomplete="off"></span></label>
+                ' . domainSelect() . '
                 <label>' . te('form.expires') . '<input type="datetime-local" name="expires_at"></label>
                 <label>' . te('form.max_clicks') . '<input type="number" name="max_clicks" min="1" max="1000000000" step="1" placeholder="' . te('form.max_clicks_ph') . '"></label>
                 <label>' . te('form.password') . '<input type="password" name="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="' . te('form.password_ph') . '"></label>

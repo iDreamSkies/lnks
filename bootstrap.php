@@ -6,7 +6,7 @@
 
 require_once __DIR__ . '/layout.php';
 
-const LNKS_SCHEMA_VERSION = 5;
+const LNKS_SCHEMA_VERSION = 6;
 
 if (!file_exists(__DIR__ . '/config.php')) {
     // Not installed yet — send the user to the web installer
@@ -37,6 +37,7 @@ function cfg(): array {
         'admin_pass_hash' => '',
         'api_token'    => '',
         'rate_limit'   => ['max' => 20, 'window_min' => 60],
+        'domains'      => [],      // extra hosts that serve short links, e.g. ['go.example.com']
         'code'         => ['alphabet' => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', 'length' => 6],
     ], require __DIR__ . '/config.php');
 }
@@ -101,7 +102,7 @@ function migrate(PDO $pdo): void {
         $pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));   // all statements are IF NOT EXISTS
         $cols = array_column($pdo->query('PRAGMA table_info(links)')->fetchAll(), 'name');
         // Columns added after v1. ADD COLUMN keeps existing rows; new columns start as NULL.
-        $added = ['title' => 'TEXT', 'last_click_at' => 'TEXT', 'expires_at' => 'TEXT', 'max_clicks' => 'INTEGER', 'password_hash' => 'TEXT'];
+        $added = ['title' => 'TEXT', 'last_click_at' => 'TEXT', 'expires_at' => 'TEXT', 'max_clicks' => 'INTEGER', 'password_hash' => 'TEXT', 'domain' => 'TEXT'];
         foreach ($added as $col => $type) {
             if (!in_array($col, $cols, true)) $pdo->exec("ALTER TABLE links ADD COLUMN $col $type");
         }
@@ -130,6 +131,40 @@ function baseUrl(): string {
 
 function hostOf(string $url): string {
     return strtolower((string)parse_url($url, PHP_URL_HOST));
+}
+
+/** Host of the current request, lower-case, without the port. */
+function requestHost(): string {
+    return strtolower(preg_replace('~:\d+$~', '', (string)($_SERVER['HTTP_HOST'] ?? '')));
+}
+
+/** Hosts that serve short links: the primary one (base_url) plus config 'domains'. */
+function allowedHosts(): array {
+    $hosts = [hostOf(baseUrl())];
+    foreach ((array)cfg()['domains'] as $d) {
+        $d = strtolower(trim((string)$d));
+        if ($d !== '' && preg_match('~^[a-z0-9.-]+$~', $d)) $hosts[] = $d;
+    }
+    return array_values(array_unique(array_filter($hosts)));
+}
+
+/** Validate a domain binding: empty = any host. Returns [host|null, error|null]. */
+function parseDomain($v): array {
+    $v = strtolower(trim((string)$v));
+    if ($v === '') return [null, null];
+    return in_array($v, allowedHosts(), true) ? [$v, null] : [null, t('err.domain')];
+}
+
+/** Full short URL of a link, on its bound domain if it has one. */
+function shortUrl(array $l): string {
+    if (empty($l['domain'])) return baseUrl() . '/' . $l['code'];
+    return (parse_url(baseUrl(), PHP_URL_SCHEME) ?: 'https') . '://' . $l['domain'] . '/' . $l['code'];
+}
+
+/** True if the URL points at one of our own hosts (would create a redirect loop). */
+function isOwnUrl(string $url): bool {
+    $h = hostOf($url);
+    return $h !== '' && in_array($h, allowedHosts(), true);
 }
 
 function clientIp(): string {
@@ -200,7 +235,8 @@ function loginFailed(PDO $pdo, string $ip): void {
 
 /** Words that can never be short codes: they collide with files, folders or entry points. */
 const RESERVED_CODES = ['admin', 'api', 'install', 'index', 'router', 'bootstrap', 'layout', 'i18n', 'csv', 'config',
-    'schema', 'public', 'storage', 'lang', 'tests', 'docs', 'scripts', 'vendor', 'readme', 'license', 'changelog'];
+    'schema', 'public', 'storage', 'lang', 'tests', 'docs', 'scripts', 'vendor', 'readme', 'license', 'changelog',
+    'login', 'logout', 'static', 'assets', 'favicon', 'robots', 'sitemap', 'well-known'];
 
 /**
  * Valid short code: generated codes are 4–12 alphanumerics; imported ones (e.g. from YOURLS)
@@ -397,7 +433,8 @@ function resolveUtm(PDO $pdo, $templateRef, $fields): array {
 /* ── Create / update link ─────────────────────────────────────────── */
 
 /**
- * @param array $opt title?, expires_at?, max_clicks?, password?, utm? (array utm_* => value, see resolveUtm)
+ * @param array $opt title?, expires_at?, max_clicks?, password?, utm? (array utm_* => value, see resolveUtm),
+ *                   code? (custom alias), domain? (one of allowedHosts(); empty = any)
  */
 function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []): array {
     $url = trim($url);
@@ -411,10 +448,13 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []):
     if (strlen($url) > 2048) {
         return ['ok' => false, 'error' => t('err.too_long')];
     }
-    $own = hostOf(baseUrl());
-    if ($own !== '' && hostOf($url) === $own) {
+    if (isOwnUrl($url)) {
         return ['ok' => false, 'error' => t('err.self')];
     }
+    $alias = trim((string)($opt['code'] ?? ''));
+    if ($alias !== '' && !isValidCode($alias)) return ['ok' => false, 'error' => t('err.alias')];
+    [$domain, $err] = parseDomain($opt['domain'] ?? '');
+    if ($err) return ['ok' => false, 'error' => $err];
     $title = cleanTitle($opt['title'] ?? null);
     [$expires, $err] = parseExpiry($opt['expires_at'] ?? null);
     if ($err) return ['ok' => false, 'error' => $err];
@@ -425,17 +465,18 @@ function createLink(PDO $pdo, string $url, ?string $ip = null, array $opt = []):
 
     // The UNIQUE constraint is the source of truth; retry on a (very rare) race.
     for ($try = 0; $try < 3; $try++) {
-        $code = generateCode($pdo);
+        $code = $alias !== '' ? $alias : generateCode($pdo);
         try {
-            $pdo->prepare('INSERT INTO links (code, url, title, expires_at, max_clicks, password_hash, created_ip, created_at)
-                           VALUES (:c, :u, :t, :e, :m, :p, :i, :a)')
+            $pdo->prepare('INSERT INTO links (code, url, title, expires_at, max_clicks, password_hash, domain, created_ip, created_at)
+                           VALUES (:c, :u, :t, :e, :m, :p, :d, :i, :a)')
                 ->execute([':c' => $code, ':u' => $url, ':t' => $title, ':e' => $expires, ':m' => $maxClicks,
-                           ':p' => $pwHash, ':i' => $ip, ':a' => now()]);
-            return ['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'code' => $code,
-                    'short_url' => baseUrl() . '/' . $code, 'url' => $url, 'title' => $title,
+                           ':p' => $pwHash, ':d' => $domain, ':i' => $ip, ':a' => now()]);
+            return ['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'code' => $code, 'domain' => $domain,
+                    'short_url' => shortUrl(['code' => $code, 'domain' => $domain]), 'url' => $url, 'title' => $title,
                     'expires_at' => $expires, 'max_clicks' => $maxClicks, 'protected' => $pwHash !== null];
         } catch (PDOException $ex) {
             if ($ex->getCode() !== '23000') throw $ex;
+            if ($alias !== '') return ['ok' => false, 'error' => t('err.alias_taken', ['code' => $alias])];
         }
     }
     return ['ok' => false, 'error' => t('err.alloc')];

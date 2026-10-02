@@ -8,7 +8,7 @@
  * Delimiter (comma, semicolon or tab) and a UTF-8 BOM are detected automatically.
  */
 
-const CSV_COLUMNS    = ['code', 'url', 'title', 'clicks', 'status', 'created_at', 'last_click_at', 'expires_at', 'max_clicks'];
+const CSV_COLUMNS    = ['code', 'url', 'title', 'clicks', 'status', 'created_at', 'last_click_at', 'expires_at', 'max_clicks', 'domain'];
 const CSV_MAX_BYTES  = 5 * 1024 * 1024;
 const CSV_MAX_ROWS   = 50000;
 
@@ -24,6 +24,7 @@ const CSV_ALIASES = [
     'expires_at' => 'expires_at', 'expires' => 'expires_at', 'expiry' => 'expires_at',
     'max_clicks' => 'max_clicks', 'click_limit' => 'max_clicks',
     'ip' => 'ip', 'created_ip' => 'ip',
+    'domain' => 'domain', 'host' => 'domain',
 ];
 
 /* ── Export ──────────────────────────────────────────────────────── */
@@ -52,7 +53,7 @@ function exportCsv(PDO $pdo, $out): int {
         fwrite($out, csvLine([
             csvSafe($l['code']), csvSafe($l['url']), csvSafe((string)$l['title']), (int)$l['clicks_total'],
             (int)$l['status'] === 1 ? 'active' : 'disabled', $l['created_at'], (string)$l['last_click_at'],
-            (string)$l['expires_at'], $l['max_clicks'] === null ? '' : (int)$l['max_clicks'],
+            (string)$l['expires_at'], $l['max_clicks'] === null ? '' : (int)$l['max_clicks'], (string)$l['domain'],
         ]));
         $n++;
     }
@@ -168,8 +169,9 @@ function normalizeImportRow(array $r): array {
     $url = trim($r['url'] ?? '');
     if (!isValidUrl($url))  return [null, t('err.invalid_url')];
     if (strlen($url) > 2048) return [null, t('err.too_long')];
-    $own = hostOf(baseUrl());
-    if ($own !== '' && hostOf($url) === $own) return [null, t('err.self')];
+    if (isOwnUrl($url)) return [null, t('err.self')];
+    [$domain, $err] = parseDomain($r['domain'] ?? '');
+    if ($err) return [null, $err];
 
     $code = trim($r['code'] ?? '');
     if ($code !== '' && !isValidCode($code)) return [null, t('csv.err_code', ['code' => cut($code, 40, '…')])];
@@ -199,6 +201,7 @@ function normalizeImportRow(array $r): array {
         'expires_at'    => $expires,
         'max_clicks'    => $max,
         'ip'            => filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null,
+        'domain'        => $domain,
     ], null];
 }
 
@@ -234,8 +237,8 @@ function runImport(PDO $pdo, array $rows): array {
     $pdo->exec('BEGIN IMMEDIATE');
     try {
         $plan = planImport($pdo, $rows);   // re-check under the write lock
-        $ins = $pdo->prepare('INSERT INTO links (code, url, title, clicks_total, last_click_at, expires_at, max_clicks, status, created_ip, created_at)
-                              VALUES (:c, :u, :t, :n, :lc, :e, :m, :s, :ip, :a)');
+        $ins = $pdo->prepare('INSERT INTO links (code, url, title, clicks_total, last_click_at, expires_at, max_clicks, status, created_ip, domain, created_at)
+                              VALUES (:c, :u, :t, :n, :lc, :e, :m, :s, :ip, :d, :a)');
         // Rows with an explicit code first, so a generated code can never take a code used later in the file
         $new = $plan['new'];
         usort($new, fn($a, $b) => ($a['code'] === '') <=> ($b['code'] === ''));
@@ -243,7 +246,7 @@ function runImport(PDO $pdo, array $rows): array {
             $ins->execute([
                 ':c' => $r['code'] !== '' ? $r['code'] : generateCode($pdo), ':u' => $r['url'], ':t' => $r['title'],
                 ':n' => $r['clicks'], ':lc' => $r['last_click_at'], ':e' => $r['expires_at'], ':m' => $r['max_clicks'],
-                ':s' => $r['status'], ':ip' => $r['ip'], ':a' => $r['created_at'],
+                ':s' => $r['status'], ':ip' => $r['ip'], ':d' => $r['domain'] ?? null, ':a' => $r['created_at'],
             ]);
         }
         $pdo->exec('COMMIT');

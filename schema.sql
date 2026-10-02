@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS links (
     expires_at    TEXT,                -- UTC 'Y-m-d H:i:s'; NULL = never
     max_clicks    INTEGER,             -- NULL = unlimited
     password_hash TEXT,                -- password_hash() of the link password; NULL = public
+    domain        TEXT,                -- host the link is bound to (one of the allowed hosts); NULL = any
     status        INTEGER NOT NULL DEFAULT 1,
     created_ip    TEXT,
     created_at    TEXT NOT NULL

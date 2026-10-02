@@ -13,6 +13,7 @@
  *   POST   /api.php?import=csv      import CSV (raw text/csv body or multipart field "file");
  *                                   add &dry_run=1 to only validate                                 → 200
  *
+ * code (or alias): custom short code, 1–32 of [A-Za-z0-9_-]; domain: bind to one of the configured hosts
  * utm: { "source", "medium", "campaign" } and/or "utm_template": id or name — tags are added to the URL
  * expires_at: UTC "YYYY-MM-DD HH:MM[:SS]", ISO 8601 with offset, or "YYYY-MM-DD" (= end of that day)
  *
@@ -52,7 +53,7 @@ function linkOut(array $l): array {
     return [
         'id'            => (int)$l['id'],
         'code'          => $l['code'],
-        'short_url'     => baseUrl() . '/' . $l['code'],
+        'short_url'     => shortUrl($l),
         'url'           => $l['url'],
         'title'         => $l['title'],
         'clicks'        => (int)$l['clicks_total'],
@@ -62,6 +63,7 @@ function linkOut(array $l): array {
         'expires_at'    => $l['expires_at'],
         'max_clicks'    => $l['max_clicks'] === null ? null : (int)$l['max_clicks'],
         'protected'     => !empty($l['password_hash']),   // the hash itself is never returned
+        'domain'        => $l['domain'] ?? null,
         'created_at'    => $l['created_at'],
     ];
 }
@@ -121,6 +123,8 @@ switch ($method) {
         if ($err) respondJson(['ok' => false, 'error' => $err], 422);
         $r = createLink($pdo, (string)($d['url'] ?? ''), clientIp(), [
             'utm'        => $utm,
+            'code'       => isset($d['code']) ? (string)$d['code'] : (isset($d['alias']) ? (string)$d['alias'] : ''),
+            'domain'     => isset($d['domain']) ? (string)$d['domain'] : '',
             'title'      => isset($d['title']) ? (string)$d['title'] : null,
             'expires_at' => $d['expires_at'] ?? null,
             'max_clicks' => $d['max_clicks'] ?? null,

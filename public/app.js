@@ -175,6 +175,13 @@
         });
     });
 
+    // Domain picker updates the host shown in front of the short-name input
+    document.addEventListener('change', function (ev) {
+        var sel = ev.target.closest('select[name="domain"]');
+        var prefix = sel && sel.form.querySelector('.prefix[data-default-host]');
+        if (prefix) prefix.textContent = (sel.value || prefix.getAttribute('data-default-host')) + '/';
+    });
+
     // Select the freshly created short URL right away
     var result = document.querySelector('.result input[data-select]');
     if (result) result.select();
