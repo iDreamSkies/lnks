@@ -80,11 +80,11 @@ if ($canShorten) {
     <form method="post" class="shorten" action="/">
         ' . csrfField() . '
         <label class="sr-only" for="url">' . te('home.url_label') . '</label>
-        <input type="url" id="url" name="url" placeholder="https://example.com/very/long/url" required maxlength="2048" autofocus>
+        <input type="url" id="url" name="url" placeholder="' . te('home.placeholder') . '" required maxlength="2048" autofocus>
         <button type="submit" class="btn">' . te('btn.shorten') . '</button>
     </form>';
 } else {
-    $formHtml = '<p class="notice">' . te('home.private') . ' <a href="/admin.php">' . te('nav.admin') . '</a></p>';
+    $formHtml = '<p class="notice">' . te('home.private') . '</p>';
 }
 
 $resultHtml = '';
@@ -106,10 +106,13 @@ renderLayout(t('home.title'), '
         <p class="tagline">' . te('home.tagline') . '</p>
         ' . $formHtml . $resultHtml . '
     </section>
-    <section class="features">
-        <div class="card"><h2>' . te('home.f1_t') . '</h2><p class="muted">' . te('home.f1_d') . '</p></div>
-        <div class="card"><h2>' . te('home.f2_t') . '</h2><p class="muted">' . te('home.f2_d') . '</p></div>
-        <div class="card"><h2>' . te('home.f3_t') . '</h2><p class="muted">' . te('home.f3_d') . '</p></div>
+    <section class="how" aria-labelledby="how-title">
+        <h2 id="how-title">' . te('home.how') . '</h2>
+        <ol class="steps">
+            <li class="card"><span class="step-n" aria-hidden="true">1</span><h3>' . te('home.s1_t') . '</h3><p class="muted">' . te('home.s1_d') . '</p></li>
+            <li class="card"><span class="step-n" aria-hidden="true">2</span><h3>' . te('home.s2_t') . '</h3><p class="muted">' . te('home.s2_d') . '</p></li>
+            <li class="card"><span class="step-n" aria-hidden="true">3</span><h3>' . te('home.s3_t') . '</h3><p class="muted">' . te('home.s3_d') . '</p></li>
+        </ol>
     </section>
 ', [
     'nav'         => 'public',
