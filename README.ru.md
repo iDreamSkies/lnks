@@ -34,6 +34,7 @@
 - Поиск по коду, названию и URL; фильтр по статусу; сортировка по дате, кликам и последнему клику
 - Мини-график за 7 дней у каждой ссылки и страница статистики (график за 30 дней, источники переходов)
 - Включение, отключение, удаление, копирование в один клик, пагинация
+- **QR-код** для каждой ссылки: предпросмотр и скачивание PNG/SVG (генерируется в браузере, без внешних сервисов)
 
 **Клики**
 - Счётчики по ссылкам и журнал кликов (время и referrer, без IP и cookie)
@@ -107,6 +108,7 @@ server {
 
     location /storage/ { deny all; }
     location /lang/    { deny all; }
+    location /tests/   { deny all; }
     location ~ ^/(config|bootstrap|layout|i18n|router|schema|\.git) { deny all; }
 
     location / {
@@ -193,8 +195,22 @@ index.php      главная и редиректы         admin.php   адми
 api.php        REST API                    install.php веб-установщик
 bootstrap.php  конфиг, БД, хелперы         layout.php  шаблон страниц, ссылки поддержки
 i18n.php       загрузка переводов          lang/       en.php, ru.php
-schema.sql     схема базы                  public/     styles.css, app.js
+schema.sql     схема базы                  public/     styles.css, app.js, vendor/qrcode.js
+tests/         автотесты (php tests/run.php)
 ```
+
+## Тесты
+
+```bash
+php tests/run.php          # все проверки
+php tests/run.php qr       # только тесты, в названии которых есть «qr»
+```
+
+Нужен только PHP CLI с `pdo_sqlite`, PHPUnit не требуется. Раннер поднимает временную копию приложения на встроенном сервере PHP, проверяет её через HTTP и удаляет после себя. Ваши `config.php` и база не затрагиваются.
+
+## Сторонний код
+
+- `public/vendor/qrcode.js` — [QR Code Generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4, © 2009 Kazuhiko Arase, лицензия MIT (см. `public/vendor/LICENSE-qrcode-generator.txt`). Файл не изменён. «QR Code» — зарегистрированная торговая марка DENSO WAVE INCORPORATED.
 
 ## Нужно больше?
 

@@ -84,8 +84,9 @@ if ($result) {
     <div class="result" role="status">
         <input type="text" value="' . e($result['short_url']) . '" readonly data-select aria-label="Short URL">
         <button type="button" class="btn" data-copy="' . e($result['short_url']) . '">' . te('btn.copy') . '</button>
+        ' . qrButton($result['short_url'], $result['code'], 'btn ghost') . '
     </div>
-    <p class="muted small">' . te('home.points_to', ['url' => mb_strimwidth($result['url'], 0, 80, '…')]) . '</p>';
+    <p class="muted small">' . te('home.points_to', ['url' => cut($result['url'], 80, '…')]) . '</p>';
 } elseif ($error) {
     $resultHtml = '<p class="alert error" role="alert">' . e($error) . '</p>';
 }
@@ -106,6 +107,7 @@ renderLayout(t('home.title'), '
     'index'       => true,
     'canonical'   => baseUrl() . '/',
     'description' => t('home.meta_desc'),
+    'scripts'     => $result ? [QR_SCRIPT] : [],
 ]);
 
 function notFoundBody(string $msg): string {

@@ -34,6 +34,7 @@ No Composer, no framework, no Docker, no tracking pixels, no third-party scripts
 - Search by code, title or URL; filter by status; sort by date, clicks or last click
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
+- **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
 
 **Clicks**
 - Per-link counters with a click log (timestamp + referrer, no IPs, no cookies)
@@ -107,6 +108,7 @@ server {
 
     location /storage/ { deny all; }
     location /lang/    { deny all; }
+    location /tests/   { deny all; }
     location ~ ^/(config|bootstrap|layout|i18n|router|schema|\.git) { deny all; }
 
     location / {
@@ -193,8 +195,22 @@ index.php      homepage + redirects        admin.php   admin panel
 api.php        REST API                    install.php web installer
 bootstrap.php  config, DB, helpers         layout.php  page layout, support links
 i18n.php       translations loader         lang/       en.php, ru.php
-schema.sql     database schema             public/     styles.css, app.js
+schema.sql     database schema             public/     styles.css, app.js, vendor/qrcode.js
+tests/         automated checks (php tests/run.php)
 ```
+
+## Tests
+
+```bash
+php tests/run.php          # everything
+php tests/run.php qr       # only tests whose name contains "qr"
+```
+
+Needs only the PHP CLI with `pdo_sqlite` — no PHPUnit. The runner starts a throw-away copy of the app on the PHP built-in server, checks it over HTTP and removes it afterwards; your `config.php` and database are never touched.
+
+## Third-party code
+
+- `public/vendor/qrcode.js` — [QR Code Generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4, © 2009 Kazuhiko Arase, MIT license (see `public/vendor/LICENSE-qrcode-generator.txt`). Unmodified. "QR Code" is a registered trademark of DENSO WAVE INCORPORATED.
 
 ## Need more?
 

@@ -180,6 +180,23 @@ td.actions form { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; justify-c
 .bar.zero { fill: var(--border); }
 .chart-axis { display: flex; justify-content: space-between; margin-top: 6px; }
 
+/* QR dialog */
+.qr-dialog {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    width: min(360px, calc(100vw - 32px));
+}
+.qr-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.qr-dialog h2 { margin-bottom: 14px; }
+.qr-preview { background: #fff; border-radius: 8px; padding: 6px; }
+.qr-preview svg { display: block; width: 100%; height: auto; }
+.qr-url { margin: 10px 0 0; }
+.qr-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.qr-actions .btn { flex: 1 1 auto; }
+
 /* Pager */
 .pager { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; align-items: center; }
 .pager a, .pager .current { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; }

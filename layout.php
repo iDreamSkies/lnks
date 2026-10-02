@@ -12,6 +12,13 @@ function e(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 }
 
+/** UTF-8 safe truncation without requiring mbstring. */
+function cut(string $s, int $max, string $ellipsis = ''): string {
+    if (preg_match('~^.{0,' . $max . '}$~su', $s)) return $s;
+    preg_match('~^.{0,' . max(0, $max - strlen($ellipsis ? '.' : '')) . '}~su', $s, $m);
+    return ($m[0] ?? substr($s, 0, $max)) . $ellipsis;
+}
+
 /**
  * Support / contact links. Hard-coded on purpose: they are rendered in the
  * footer of every page and in the admin "Help & support" card.
@@ -64,7 +71,8 @@ function sendSecurityHeaders(): void {
 
 /**
  * Render a full page.
- * $o: nav ('public'|'admin'|'none'), narrow (bool), description, canonical, index (bool), csrf (string, admin logout form)
+ * $o: nav ('public'|'admin'|'none'), narrow (bool), description, canonical, index (bool), csrf (string, admin logout form),
+ *     scripts (extra script URLs loaded before app.js, e.g. QR_SCRIPT)
  */
 function renderLayout(string $title, string $body, array $o = []): void {
     sendSecurityHeaders();
@@ -75,6 +83,10 @@ function renderLayout(string $title, string $body, array $o = []): void {
     $v     = rawurlencode(LNKS_VERSION);
     $icon  = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8ff00'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%230e0f10'/%3E%3C/svg%3E";
     $fullTitle = e($title) . ' — ' . e($app);
+    $scripts = '';
+    foreach ($o['scripts'] ?? [] as $src) {
+        $scripts .= '<script src="' . e($src) . '?v=' . $v . '" defer></script>';
+    }
 
     $head  = '<meta charset="utf-8">'
         . '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -111,7 +123,7 @@ function renderLayout(string $title, string $body, array $o = []): void {
     }
 
     echo '<!doctype html><html lang="' . currentLang() . '"><head>' . $head . '</head>'
-        . '<body data-copied="' . te('js.copied') . '" data-copyfail="' . te('js.copyfail') . '">'
+        . '<body' . bodyData() . '>'
         . '<header class="site-header"><div class="header-inner">'
         . '<a class="brand" href="/">' . e($app) . '<span class="accent">.</span></a>'
         . '<nav class="nav">' . $links . langSwitcher() . '</nav></div></header>'
@@ -121,8 +133,26 @@ function renderLayout(string $title, string $body, array $o = []): void {
         . '<p class="muted small">lnks v' . e(LNKS_VERSION) . ' · MIT · ' . te('footer.built_by') . ' '
         . '<a href="https://dreamskies.dev" target="_blank" rel="noopener">DreamSkies</a></p>'
         . '</div></footer>'
+        . $scripts
         . '<script src="/public/app.js?v=' . $v . '" defer></script>'
         . '</body></html>';
+}
+
+/** Translated labels for public/app.js, exposed as <body data-*> attributes (no inline scripts under CSP). */
+function bodyData(): string {
+    $keys = ['copied' => 'js.copied', 'copyfail' => 'js.copyfail', 'qr-title' => 'qr.title',
+             'qr-png' => 'qr.png', 'qr-svg' => 'qr.svg', 'qr-close' => 'qr.close'];
+    $out = '';
+    foreach ($keys as $attr => $key) $out .= ' data-' . $attr . '="' . te($key) . '"';
+    return $out;
+}
+
+/** Client-side QR generator (MIT, Kazuhiko Arase) — see public/vendor/LICENSE-qrcode-generator.txt */
+const QR_SCRIPT = '/public/vendor/qrcode.js';
+
+/** "QR" button; public/app.js opens a dialog with a preview and PNG/SVG downloads. */
+function qrButton(string $url, string $name, string $class = 'btn ghost sm'): string {
+    return '<button type="button" class="' . e($class) . '" data-qr="' . e($url) . '" data-qr-name="' . e($name) . '">' . te('qr.button') . '</button>';
 }
 
 /** Inline SVG bar chart (no inline styles so the strict CSP stays intact). */

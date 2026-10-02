@@ -13,6 +13,12 @@ return [
     'js.copied'   => 'Скопировано!',
     'js.copyfail' => 'Нажмите Ctrl+C',
 
+    'qr.button'   => 'QR',
+    'qr.title'    => 'QR-код',
+    'qr.png'      => 'Скачать PNG',
+    'qr.svg'      => 'Скачать SVG',
+    'qr.close'    => 'Закрыть',
+
     // support links
     'support.title'    => 'Помощь и поддержка',
     'support.telegram' => 'Telegram',
