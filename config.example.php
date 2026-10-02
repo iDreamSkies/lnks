@@ -34,6 +34,9 @@ return [
     // Country statistics: build storage/geoip-v4.bin with `php scripts/build-geoip.php`, then set to true.
     'geoip' => false,
 
+    // Once a day the admin panel checks GitHub for a newer release and shows a notice. Never updates by itself.
+    'update_check' => true,
+
     // Read the visitor IP from X-Forwarded-For (right-most entry). Enable ONLY behind your own reverse proxy,
     // otherwise clients can spoof it and bypass the rate limit.
     'trust_proxy' => false,

@@ -4,3 +4,4 @@ storage/*.sqlite-*
 storage/import-*.json
 storage/geoip-v4.bin
 dist/
+storage/update-check.json

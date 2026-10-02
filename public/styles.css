@@ -183,6 +183,7 @@ input[type="datetime-local"], input[type="number"] {
 .alert { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); text-align: left; }
 .alert.error { color: var(--danger); border-color: var(--danger); }
 .alert.ok { color: var(--ok); border-color: var(--ok); }
+.alert.update { border-color: var(--accent); color: var(--text); }
 .error { color: var(--danger); }
 .notice { color: var(--muted); }
 

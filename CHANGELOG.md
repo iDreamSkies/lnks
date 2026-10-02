@@ -25,6 +25,7 @@ no SSH, no MySQL and no dependencies.
 - Automated tests (`php tests/run.php`, no PHPUnit) and CI on PHP 8.0–8.3, including a build
   without `mbstring` and `ctype`.
 - Release tooling: `scripts/build-release.php` and a workflow that publishes a ZIP for every `v*` tag.
+- "New version available" notice in the admin panel (GitHub latest release, checked once a day; `'update_check'`).
 
 ### Changed
 - Short codes may now be 1–32 characters of `[A-Za-z0-9_-]` (YOURLS keywords keep working);

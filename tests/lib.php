@@ -76,6 +76,7 @@ function writeConfig(string $dir, array $extra = []): void {
         'public_form'     => true,
         'rate_limit'      => ['max' => 1000, 'window_min' => 60],
         'domains'         => ['go.test', 'alt.test'],
+        'update_check'    => false,   // tests never call GitHub; test_update.php points the feed at a local file
     ], $extra);
     file_put_contents($dir . '/config.php', "<?php\nreturn " . var_export($cfg, true) . ";\n");
 }
