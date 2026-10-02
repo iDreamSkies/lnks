@@ -36,6 +36,7 @@ No Composer, no framework, no Docker, no tracking pixels, no third-party scripts
 - Time left and "12 / 100 clicks" shown in the list; edit title, expiry and limit on the link page
 - Per-link 7-day sparkline and a statistics page (30-day chart, top referrers)
 - Enable / disable / delete, one-click copy, pagination
+- **CSV import & export** with preview, duplicate detection and an error report; **YOURLS exports import as is** (keywords keep working)
 - **QR code** for every link: preview and PNG/SVG download (generated in the browser, no external service)
 
 **Clicks**
@@ -111,7 +112,7 @@ server {
     location /storage/ { deny all; }
     location /lang/    { deny all; }
     location /tests/   { deny all; }
-    location ~ ^/(config|bootstrap|layout|i18n|router|schema|\.git) { deny all; }
+    location ~ ^/(config|bootstrap|layout|i18n|csv|router|schema|\.git) { deny all; }
 
     location / {
         try_files $uri /index.php$is_args$args;
@@ -124,6 +125,30 @@ server {
     }
 }
 ```
+
+## Import & export (CSV)
+
+**Admin → Import / Export.**
+
+- **Export** downloads every link: `code,url,title,clicks,status,created_at,last_click_at,expires_at,max_clicks` (UTF-8 with BOM, opens in Excel). Cells that start with `=`, `+`, `-` or `@` get a leading `'` so spreadsheets do not run them as formulas; the importer removes it again.
+- **Import** takes a CSV with a header row. Only `url` is required; the other export columns are optional, in any order. Comma, semicolon (Excel in many locales) and tab delimiters are detected automatically, as is a single header-less column of URLs.
+- You first see a **preview**: how many rows are new, which codes are already taken (skipped, never overwritten), and every row with an error and its line number. Nothing is written until you confirm.
+- Rows without a code get a generated one. Imported codes may be 1–32 characters: letters, digits, `-`, `_`. Reserved words (`admin`, `api`, `public`, …) are rejected.
+- Limits: 5 MB, 50 000 rows per file.
+
+### Migrating from YOURLS
+
+lnks imports a CSV export of the YOURLS link table, and **your existing short links keep working** because keywords are imported as codes.
+
+1. **Export from YOURLS.** Either use an export plugin, or in phpMyAdmin run the query below and export the result as CSV with the column names in the first row:
+   ```sql
+   SELECT keyword, url, title, timestamp, ip, clicks FROM yourls_url;
+   ```
+2. **Install lnks** on the same domain (or point the domain to it later).
+3. Open **Admin → Import / Export**, choose the file, check the preview (look for the "YOURLS format detected" note) and click **Import**.
+4. Point the domain to lnks. `https://your.domain/abc` now redirects exactly as before, and click counters continue from the YOURLS numbers.
+
+Notes: YOURLS stores `timestamp` in the server's time zone; lnks imports it as-is and treats it as UTC. A literal `NULL` (how phpMyAdmin writes empty values) is treated as empty. The per-click log (`yourls_log`) is not imported — only totals. Keywords with characters other than letters, digits, `-` and `_` are listed as errors in the preview.
 
 ## Language
 
@@ -165,6 +190,19 @@ Create response (201):
 
 `expires_at` is UTC: `YYYY-MM-DD HH:MM[:SS]`, ISO 8601 with an offset (`2026-12-31T23:59:00+03:00`, converted to UTC), or `YYYY-MM-DD` (end of that day). Link objects include `state`: `active`, `disabled`, `expired` (date passed) or `limit` (click limit reached).
 
+CSV over the API:
+
+```bash
+# Export everything (same file as Admin → Import / Export)
+curl "https://lnks.example.com/api.php?export=csv" -H "Authorization: Bearer YOUR_API_TOKEN" -o links.csv
+
+# Import: validate first with dry_run=1, then run for real (raw body or multipart field "file")
+curl -X POST "https://lnks.example.com/api.php?import=csv&dry_run=1" -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -H "Content-Type: text/csv" --data-binary @links.csv
+```
+
+The import answers `{ "ok": true, "imported": 5, "duplicates": 1, "errors": [{ "line": 7, "error": "..." }] }` (`would_import` instead of `imported` on a dry run).
+
 Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status (400, 401, 404, 405, 422, 503).
 
 ## Configuration
@@ -198,6 +236,7 @@ Errors return `{ "ok": false, "error": "..." }` with an appropriate HTTP status 
 index.php      homepage + redirects        admin.php   admin panel
 api.php        REST API                    install.php web installer
 bootstrap.php  config, DB, helpers         layout.php  page layout, support links
+csv.php        CSV import / export
 i18n.php       translations loader         lang/       en.php, ru.php
 schema.sql     database schema             public/     styles.css, app.js, vendor/qrcode.js
 tests/         automated checks (php tests/run.php)
@@ -227,7 +266,6 @@ lnks is the intentionally minimal open-source core. A full-featured edition exis
 - A/B split testing
 - Telegram bot integration
 - Multi-user access with roles
-- Import/export
 
 Interested in the full edition, a hosted instance, or custom development?
 Reach out: [dreamskies.dev](https://dreamskies.dev) · Telegram [@dreamskies](https://t.me/dreamskies)

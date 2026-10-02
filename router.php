@@ -7,7 +7,7 @@
 $path = rawurldecode((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 
 // Never serve the database, config or internal files (the .htaccess rules do not apply here)
-if (preg_match('~^/(storage/|lang/|tests/|\.git|config(\.example)?\.php$|schema\.sql$|bootstrap\.php$|layout\.php$|i18n\.php$|router\.php$|README(\.ru)?\.md$)~', $path)
+if (preg_match('~^/(storage/|lang/|tests/|\.git|config(\.example)?\.php$|schema\.sql$|bootstrap\.php$|layout\.php$|i18n\.php$|csv\.php$|router\.php$|README(\.ru)?\.md$)~', $path)
     || str_contains($path, '..')) {
     http_response_code(403);
     exit('Forbidden');

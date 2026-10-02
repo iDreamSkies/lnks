@@ -9,7 +9,7 @@ $uri = trim((string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/'
 if ($uri === 'index.php') $uri = '';
 
 /* ── Redirect by short code ──────────────────────────────────────── */
-if ($uri !== '' && preg_match('~^[a-zA-Z0-9]{4,12}$~', $uri)) {
+if ($uri !== '' && isValidCode($uri)) {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     if ($method !== 'GET' && $method !== 'HEAD') {
         header('Allow: GET, HEAD');

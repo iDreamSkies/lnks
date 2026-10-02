@@ -51,7 +51,7 @@ test('http: unknown and disabled codes return 404', function () {
 
 test('http: internal files are not served', function () {
     $c = new Client();
-    foreach (['/config.php', '/storage/lnks.sqlite', '/bootstrap.php', '/layout.php', '/i18n.php', '/lang/en.php', '/schema.sql', '/README.md', '/tests/run.php'] as $p) {
+    foreach (['/config.php', '/storage/lnks.sqlite', '/bootstrap.php', '/layout.php', '/i18n.php', '/csv.php', '/lang/en.php', '/schema.sql', '/README.md', '/tests/run.php'] as $p) {
         eq(403, $c->get($p)->status, $p);
     }
     eq(200, $c->get('/index.php')->status, '/index.php is the homepage');
