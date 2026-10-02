@@ -18,7 +18,11 @@ CREATE TABLE IF NOT EXISTS clicks (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     link_id  INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE,
     ts       TEXT NOT NULL,
-    referrer TEXT
+    referrer TEXT,
+    browser  TEXT,        -- family from User-Agent (ua.php), e.g. Chrome
+    os       TEXT,        -- e.g. Android
+    device   TEXT,        -- desktop | mobile | tablet
+    country  TEXT         -- ISO code when the optional GeoIP table is enabled
 );
 
 CREATE INDEX IF NOT EXISTS idx_clicks_link_ts ON clicks(link_id, ts);

@@ -28,6 +28,9 @@ test('migration: upgrades a database from the main branch', function () {
     eq(null, $l['max_clicks'], 'new column max_clicks starts empty');
     eq(null, $l['password_hash'], 'new column password_hash starts empty');
     eq(0, (int)$pdo->query('SELECT COUNT(*) FROM utm_templates')->fetchColumn(), 'utm_templates table created');
+    $clickCols = array_column($pdo->query('PRAGMA table_info(clicks)')->fetchAll(), 'name');
+    foreach (['browser', 'os', 'device', 'country'] as $col) ok(in_array($col, $clickCols, true), "clicks.$col added");
+    eq(null, $pdo->query('SELECT browser FROM clicks LIMIT 1')->fetchColumn(), 'old clicks keep NULL (shown as Unknown)');
     $pdo = null;
     @unlink($file);
 });
